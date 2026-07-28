@@ -28,6 +28,10 @@ public class Bridge : MonoBehaviour
     {
         if (arenaPrefab == null) throw new Exception("Bridge.arenaPrefab is not set");
 
+        // Unity stops calling Update once its window loses focus, which stalls the
+        // lock step protocol the moment attention moves to the python terminal.
+        Application.runInBackground = true;
+
         Physics.simulationMode = SimulationMode.Script;
         Time.fixedDeltaTime = physicsDt;
         substeps = Mathf.RoundToInt(controlPeriod / physicsDt);

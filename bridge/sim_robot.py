@@ -25,6 +25,8 @@ class Simulation:
         self.dt = info["dt"]
         self.obs_dim = info["obs_dim"]
         self.action_dim = info["action_dim"]
+        print("handshake: %d arenas, dt %.4f, obs_dim %d, action_dim %d, session_seed %d"
+              % (self.arenas, self.dt, self.obs_dim, self.action_dim, session_seed))
 
     def reset(self, seeds=None, randomize_scenario=True, randomize_physics=False):
         message = {
@@ -36,6 +38,8 @@ class Simulation:
             if len(seeds) != self.arenas:
                 raise ValueError("expected %d seeds" % self.arenas)
             message["seeds"] = [int(s) for s in seeds]
+        print("reset: seeds %s, scenario %s, physics %s"
+              % (seeds, randomize_scenario, randomize_physics))
         return self._unpack(self.conn.request(message))
 
     def step(self, actions):
@@ -45,6 +49,7 @@ class Simulation:
         return self._unpack(self.conn.request({"cmd": "step", "actions": flat}))
 
     def close(self):
+        print("quit")
         self.conn.send({"cmd": "quit"})
         self.conn.close()
 

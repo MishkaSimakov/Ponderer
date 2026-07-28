@@ -3,11 +3,3 @@ class Policy(object):
 
     def act(self, obs):
         raise NotImplementedError
-
-
-class ConstantPolicy(Policy):
-    def __init__(self, action):
-        self.action = tuple(action)
-
-    def act(self, obs):
-        return self.action

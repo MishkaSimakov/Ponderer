@@ -5,6 +5,7 @@ from ev3dev2.sensor import INPUT_1, INPUT_2, INPUT_3
 from ev3dev2.sensor.lego import ColorSensor, UltrasonicSensor
 
 from shared.csv_logger import CsvLogger
+from shared.logs import run_prefix
 
 import time
 
@@ -22,7 +23,8 @@ right_color_sensor = ColorSensor(INPUT_2)
 left_motor = Motor(OUTPUT_A)
 right_motor = Motor(OUTPUT_B)
 
-logger = CsvLogger("sensors.csv", ["t", "distance", "left_color", "right_color", "left_position", "right_position"])
+prefix = run_prefix("brick", "main")
+logger = CsvLogger(prefix + ".csv", ["t", "distance", "left_color", "right_color", "left_position", "right_position"])
 
 for i in range(500):
     next_t += period
@@ -46,5 +48,5 @@ for i in range(500):
 logger.close()
 left_motor.stop()
 
-with open("main.log", "a") as f:
+with open(prefix + ".log", "w") as f:
     f.write("overruns: " + str(overruns) + "\n")
