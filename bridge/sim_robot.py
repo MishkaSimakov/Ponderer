@@ -1,0 +1,79 @@
+from collections import namedtuple
+
+from bridge.connection import Connection, PROTOCOL_VERSION
+
+# obs is the observation to act on next; terminal_obs is the last observation of a
+# finished episode and is meaningful only where terminated or truncated is set.
+Step = namedtuple("Step", "obs terminal_obs reward terminated truncated episode step")
+
+
+class Simulation:
+    """All arenas of one Unity process, one round trip per control step."""
+
+    def __init__(self, port=5005, host="127.0.0.1", session_seed=0):
+        self.conn = Connection(host, port)
+        info = self.conn.request({
+            "cmd": "handshake",
+            "version": PROTOCOL_VERSION,
+            "session_seed": int(session_seed),
+        })
+
+        if info["version"] != PROTOCOL_VERSION:
+            raise RuntimeError("protocol version mismatch: unity %d" % info["version"])
+
+        self.arenas = info["arenas"]
+        self.dt = info["dt"]
+        self.obs_dim = info["obs_dim"]
+        self.action_dim = info["action_dim"]
+
+    def reset(self, seeds=None, randomize_scenario=True, randomize_physics=False):
+        message = {
+            "cmd": "reset",
+            "randomize_scenario": randomize_scenario,
+            "randomize_physics": randomize_physics,
+        }
+        if seeds is not None:
+            if len(seeds) != self.arenas:
+                raise ValueError("expected %d seeds" % self.arenas)
+            message["seeds"] = [int(s) for s in seeds]
+        return self._unpack(self.conn.request(message))
+
+    def step(self, actions):
+        if len(actions) != self.arenas:
+            raise ValueError("expected %d actions" % self.arenas)
+        flat = [float(v) for action in actions for v in action]
+        return self._unpack(self.conn.request({"cmd": "step", "actions": flat}))
+
+    def close(self):
+        self.conn.send({"cmd": "quit"})
+        self.conn.close()
+
+    def _unpack(self, response):
+        dim = self.obs_dim
+        split = lambda key: [response[key][i * dim:(i + 1) * dim] for i in range(self.arenas)]
+        return Step(
+            obs=split("obs"),
+            terminal_obs=split("terminal_obs"),
+            reward=response["reward"],
+            terminated=response["terminated"],
+            truncated=response["truncated"],
+            episode=response["episode"],
+            step=response["step"],
+        )
+
+
+class SimRobot:
+    """Single arena, matching the interface shared.runner expects."""
+
+    def __init__(self, simulation, seed=None):
+        if simulation.arenas != 1:
+            raise ValueError("SimRobot needs a single arena simulation")
+        self.sim = simulation
+        self.seed = seed
+
+    def reset(self):
+        seeds = None if self.seed is None else [self.seed]
+        return self.sim.reset(seeds=seeds, randomize_physics=False).obs[0]
+
+    def step(self, action):
+        return self.sim.step([action]).obs[0]

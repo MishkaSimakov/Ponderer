@@ -4,7 +4,7 @@ from ev3dev2.motor import Motor, OUTPUT_A, OUTPUT_B, SpeedPercent
 from ev3dev2.sensor import INPUT_1, INPUT_2, INPUT_3
 from ev3dev2.sensor.lego import ColorSensor, UltrasonicSensor
 
-from csv_logger import CsvLogger
+from shared.csv_logger import CsvLogger
 
 import time
 
@@ -33,9 +33,6 @@ for i in range(500):
     right_color = right_color_sensor.reflected_light_intensity
     left_position = left_motor.position
     right_position = right_motor.position
-
-    if i == 250:
-        left_motor.run_forever(speed_sp=1560)
 
     logger.log(time.monotonic() - start_t, distance, left_color, right_color, left_position, right_position)
 
