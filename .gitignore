@@ -1,12 +1,11 @@
 **/.idea
 **/.venv
 **/.DS_Store
+**/__pycache__
 
 logs
+analysis
+experiments
 
 .claude
 CLAUDE.md
-
-analysis
-experiments
-**/__pycache__
