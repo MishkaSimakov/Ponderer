@@ -6,6 +6,7 @@
 logs
 analysis
 experiments
+docs
 
 .claude
 CLAUDE.md

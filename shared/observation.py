@@ -1,8 +1,4 @@
-COLUMNS = ["distance", "left_color", "right_color", "left_position", "right_position"]
+# t is seconds since the episode started, by the robot's own clock.
+COLUMNS = ["t", "distance", "left_color", "right_color", "left_position", "right_position"]
 
 DIM = len(COLUMNS)
-
-
-def shape(raw):
-    """Raw sensors to policy input. Passthrough until there is a policy to feed."""
-    return list(raw)

@@ -10,5 +10,8 @@ class CsvLogger:
     def log(self, *values):
         self.writer.writerow(values)
 
+    def flush(self):
+        self.file.flush()
+
     def close(self):
         self.file.close()

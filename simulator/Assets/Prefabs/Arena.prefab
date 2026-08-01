@@ -4006,6 +4006,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f0eb062668f824ba7866db5ea842e0b2, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::LargeMotor
+  wheelRadius: 0.028
+  loadShare: 0.4
+  frictionCoef: 0.6
+  longitudinalStiffness: 30
+  lateralStiffness: 30
 --- !u!1 &4155830123596683758
 GameObject:
   m_ObjectHideFlags: 0
@@ -4590,6 +4595,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f0eb062668f824ba7866db5ea842e0b2, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::LargeMotor
+  wheelRadius: 0.028
+  loadShare: 0.4
+  frictionCoef: 0.6
+  longitudinalStiffness: 30
+  lateralStiffness: 30
 --- !u!1 &4780318573250707055
 GameObject:
   m_ObjectHideFlags: 0
@@ -4779,8 +4789,8 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 7113234621157299302}
-  - component: {fileID: 2644406632249631361}
   - component: {fileID: 9179941196769678405}
+  - component: {fileID: 854630523507151461}
   m_Layer: 0
   m_Name: Robot
   m_TagString: Untagged
@@ -4810,23 +4820,6 @@ Transform:
   - {fileID: 6403711724417319037}
   m_Father: {fileID: 8525337126641106190}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &2644406632249631361
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 4999833163325122755}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 22c879f84b4d840818cff61ba64c48c1, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::RobotController
-  ultrasonic: {fileID: 4300102847079524635}
-  leftColor: {fileID: 1805699769284606692}
-  rightColor: {fileID: 3439303719997606586}
-  leftMotor: {fileID: 7960761506765720433}
-  rightMotor: {fileID: 4417992575931334323}
 --- !u!54 &9179941196769678405
 Rigidbody:
   m_ObjectHideFlags: 0
@@ -4837,7 +4830,7 @@ Rigidbody:
   serializedVersion: 5
   m_Mass: 0.662
   m_LinearDamping: 0
-  m_AngularDamping: 0.05
+  m_AngularDamping: 0
   m_CenterOfMass: {x: 0, y: 0, z: 0}
   m_InertiaTensor: {x: 1, y: 1, z: 1}
   m_InertiaRotation: {x: 0, y: 0, z: 0, w: 1}
@@ -4854,6 +4847,23 @@ Rigidbody:
   m_Interpolate: 0
   m_Constraints: 0
   m_CollisionDetection: 0
+--- !u!114 &854630523507151461
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4999833163325122755}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 22c879f84b4d840818cff61ba64c48c1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::RobotController
+  ultrasonic: {fileID: 4300102847079524635}
+  leftColor: {fileID: 1805699769284606692}
+  rightColor: {fileID: 3439303719997606586}
+  leftMotor: {fileID: 7960761506765720433}
+  rightMotor: {fileID: 4417992575931334323}
 --- !u!1 &5015751772221566891
 GameObject:
   m_ObjectHideFlags: 0
@@ -6663,7 +6673,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Arena
   maxSteps: 200
-  robot: {fileID: 2644406632249631361}
+  robot: {fileID: 854630523507151461}
 --- !u!1 &6281741980324924909
 GameObject:
   m_ObjectHideFlags: 0

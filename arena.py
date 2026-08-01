@@ -44,7 +44,7 @@ def run(make_policy, port=5005, seed=0, steps=None, randomize_scenario=False, lo
     try:
         while steps is None or tick < steps:
             action = policy.act(obs)
-            logger.log(time.monotonic() - start, action[0], action[1], *obs)
+            logger.log(action[0], action[1], *obs)
             state = sim.step([action])
             obs = state.obs[0]
             tick += 1
@@ -97,5 +97,4 @@ def main():
 
 
 if __name__ == "__main__":
-    # main()
-    run(lambda: ConstantPolicy((100.0, 100.0)))
+    main()
