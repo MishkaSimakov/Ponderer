@@ -50,7 +50,12 @@ class Simulation:
 
     def close(self):
         print("quit")
-        self.conn.send({"cmd": "quit"})
+        # Unity may have stopped on its own, and then there is nobody left to tell.
+        # Closing is the one place where a dead socket is not an error.
+        try:
+            self.conn.send({"cmd": "quit"})
+        except OSError as error:
+            print("could not send quit: %s" % error)
         self.conn.close()
 
     def _unpack(self, response):

@@ -417,7 +417,7 @@ MonoBehaviour:
   controlPeriod: 0.05
   physicsDt: 0.005
   editorPort: 5005
-  editorArenas: 1
+  editorArenas: 10
 --- !u!4 &797723396
 Transform:
   m_ObjectHideFlags: 0

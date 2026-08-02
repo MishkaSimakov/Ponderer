@@ -6672,11 +6672,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 41164fe10b3d040cab80fd4ab0c10504, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Arena
-  maxSteps: 200
+  maxSteps: 500
   robot: {fileID: 854630523507151461}
   track: {fileID: 8520895092726501753}
   offTrackDistance: 0.06
-  logRewards: 1
+  logRewards: 0
 --- !u!114 &1486906857391478819
 MonoBehaviour:
   m_ObjectHideFlags: 0

@@ -70,6 +70,9 @@ def run(make_policy, port=5005, seed=0, steps=None, randomize_scenario=False, lo
                 deadline = time.monotonic()
     except KeyboardInterrupt:
         pass
+    except OSError as error:
+        # Unity stopped. The log written so far is still worth keeping.
+        print("simulation stopped: %s" % error)
 
     print("%d steps, %d overruns" % (tick, overruns))
     logger.close()

@@ -12,7 +12,7 @@ import time
 from stable_baselines3.common.callbacks import CheckpointCallback
 
 from rl.builder import ARCHS, build
-from rl.callbacks import OutcomeCallback
+from rl.callbacks import Stats
 from rl.export import export
 from shared.logs import ROOT
 
@@ -61,17 +61,20 @@ def main():
         ent_coef=args.ent_coef,
     )
 
-    # A run is normally stopped by hand, so ctrl-c still has to save and export.
+    # A run ends by hand or because unity stopped. Either way the weights are the point
+    # of the run, so saving and exporting happen anyway.
     try:
         model.learn(
             total_timesteps=args.total_steps,
             tb_log_name=name,
-            callback=[OutcomeCallback(),
+            callback=[Stats(),
                       CheckpointCallback(save_freq=args.n_steps * 20, save_path=run,
                                          name_prefix="model")],
         )
     except KeyboardInterrupt:
         print("interrupted")
+    except OSError as error:
+        print("simulation stopped: %s" % error)
 
     model.save(os.path.join(run, "model"))
     print("exported %s" % export(model, args.arch, name))

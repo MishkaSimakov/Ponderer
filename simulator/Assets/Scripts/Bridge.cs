@@ -68,9 +68,7 @@ public class Bridge : MonoBehaviour
             return;
         }
 
-        Debug.Log(line);
         string response = Handle(JsonUtility.FromJson<Request>(line));
-        Debug.Log(response);
         if (response != null) Send(response);
     }
 
