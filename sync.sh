@@ -16,5 +16,5 @@ rsync -rlptv --delete \
     --exclude='*.pyc' \
     --exclude='*.csv' \
     --exclude='*.log' \
-    server shared experiments \
+    server shared experiments policy \
     "$HOST:$DEST/"
