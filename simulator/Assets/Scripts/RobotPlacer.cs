@@ -11,10 +11,6 @@ public class RobotPlacer : MonoBehaviour, IArenaResettable
     [SerializeField] TrackController track;
     [SerializeField] Vector2 headingRange = new Vector2(-10f, 10f);
 
-    // Sensors and wheels sit at negative z: the model faces its own -Z, while the
-    // track hands out a +Z heading.
-    static readonly Quaternion ModelForward = Quaternion.Euler(0f, 180f, 0f);
-
     public ResetPhase Phase { get { return ResetPhase.Placement; } }
 
     void Awake()
@@ -26,10 +22,11 @@ public class RobotPlacer : MonoBehaviour, IArenaResettable
     public void OnArenaReset(ArenaContext ctx)
     {
         float heading = ctx.ScenarioRng(this).Range(headingRange);
-        Pose start = track.Start;
 
-        body.position = start.position;
-        body.rotation = start.rotation * ModelForward * Quaternion.Euler(0f, heading, 0f);
+        body.transform.SetPositionAndRotation(
+            track.Start.position,
+            track.Start.rotation * Quaternion.Euler(0f, heading, 0f)
+        );
         body.linearVelocity = Vector3.zero;
         body.angularVelocity = Vector3.zero;
     }

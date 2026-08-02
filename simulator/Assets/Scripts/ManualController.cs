@@ -5,7 +5,7 @@ using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.Controls;
 
 // Keyboard replaces python: same stepping path as Bridge, clocked by real time.
-// Episodes never truncate here, reset is manual.
+// Episodes never truncate here, but conditions still end them.
 public class ManualController : MonoBehaviour
 {
     static readonly string[] ObsNames = { "t", "distance", "left_color", "right_color", "left_position", "right_position" };
@@ -34,6 +34,7 @@ public class ManualController : MonoBehaviour
 
         arena = Instantiate(arenaPrefab, Vector3.zero, Quaternion.identity);
         arena.Initialize(0, seed);
+        arena.DisableTruncation();
         arena.ResetEpisode(randomize, randomize, arena.NextSeed());
     }
 
@@ -62,6 +63,7 @@ public class ManualController : MonoBehaviour
                 arena.Tick(physicsDt);
                 Physics.Simulate(physicsDt);
             }
+            arena.AdvanceStep();
         }
 
         arena.Observe(obs, 0);

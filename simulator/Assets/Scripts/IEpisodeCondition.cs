@@ -4,4 +4,7 @@
 public interface IEpisodeCondition
 {
     bool Terminated { get; }
+
+    // Added to the step reward when this condition ends the episode.
+    float Reward { get; }
 }

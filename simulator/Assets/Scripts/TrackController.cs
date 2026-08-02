@@ -258,6 +258,12 @@ public class TrackController : MonoBehaviour, IArenaResettable
         };
     }
 
+    // Distance in the pad plane, so how high the robot rides does not count.
+    public float DistanceToFinish(Vector3 world)
+    {
+        return (ToTrack(world) - points[count - 1]).magnitude;
+    }
+
     Vector3 ToWorld(Vector2 track)
     {
         return transform.TransformPoint(new Vector3(track.x / scale.x, 0f, track.y / scale.z));
