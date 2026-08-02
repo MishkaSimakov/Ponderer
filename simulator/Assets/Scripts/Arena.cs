@@ -9,7 +9,9 @@ public class Arena : MonoBehaviour
 
     IArenaResettable[] resettables;
     IEpisodeCondition[] conditions;
+    IReward[] rewards;
     readonly float[] terminalObs = new float[RobotController.ObsDim];
+    RobotAction action;
     int index;
     int sessionSeed;
     bool initialized;
@@ -32,6 +34,7 @@ public class Arena : MonoBehaviour
             .OrderBy(r => r.Phase)
             .ToArray();
         conditions = GetComponentsInChildren<IEpisodeCondition>(true).ToArray();
+        rewards = GetComponentsInChildren<IReward>(true).ToArray();
     }
 
     // Called on handshake: the session seed comes from python, not the command line.
@@ -54,6 +57,7 @@ public class Arena : MonoBehaviour
         Terminated = false;
         Truncated = false;
         Reward = 0f;
+        action = default;
 
         ArenaContext ctx = new ArenaContext(transform, seed, scenario, physics);
         for (int i = 0; i < resettables.Length; i++) resettables[i].OnArenaReset(ctx);
@@ -70,6 +74,7 @@ public class Arena : MonoBehaviour
 
     public void ApplyAction(float left, float right)
     {
+        action = new RobotAction(left, right);
         robot.SetDuty(left, right);
     }
 
@@ -82,7 +87,11 @@ public class Arena : MonoBehaviour
     public void AdvanceStep()
     {
         Step++;
-        Reward = 0f;
+
+        // Summed before the auto reset, on the same state terminalObs captures.
+        RewardContext ctx = new RewardContext(robot, action);
+        float reward = 0f;
+        for (int i = 0; i < rewards.Length; i++) reward += rewards[i].Evaluate(in ctx);
 
         // Terminated: the episode genuinely ended, no future return exists.
         // Truncated: the step limit cut off an episode that would have continued.
@@ -97,6 +106,7 @@ public class Arena : MonoBehaviour
             ResetEpisode(scenario, physics, NextSeed());
         }
 
+        Reward = reward;
         Terminated = terminated;
         Truncated = truncated;
     }
