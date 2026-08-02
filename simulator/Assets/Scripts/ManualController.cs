@@ -1,4 +1,5 @@
 using System;
+using System.Text;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.Controls;
@@ -73,17 +74,25 @@ public class ManualController : MonoBehaviour
 
     void OnGUI()
     {
+        const float Margin = 10f;
+        const float Padding = 8f;
+
         GUI.skin.label.fontSize = 14;
-        GUILayout.BeginArea(new Rect(10f, 10f, 280f, 230f), GUI.skin.box);
+        // CalcSize only reports the true width of the longest line without wrapping.
+        GUI.skin.label.wordWrap = false;
 
-        GUILayout.Label("duty   L " + left.ToString("F0") + "   R " + right.ToString("F0"));
-        GUILayout.Label("level  " + level.ToString("F0"));
-        GUILayout.Space(8f);
+        StringBuilder text = new StringBuilder();
+        text.Append("duty   L ").Append(left.ToString("F0"))
+            .Append("   R ").Append(right.ToString("F0")).Append('\n');
+        text.Append("level  ").Append(level.ToString("F0")).Append("\n\n");
         for (int i = 0; i < ObsNames.Length; i++)
-            GUILayout.Label(ObsNames[i] + "   " + obs[i].ToString("F1"));
-        GUILayout.Space(8f);
-        GUILayout.Label("WASD drive   -/+ level\nspace stop   R reset");
+            text.Append(ObsNames[i]).Append("   ").Append(obs[i].ToString("F1")).Append('\n');
+        text.Append("\nWASD drive   -/+ level\nspace stop   R reset");
 
-        GUILayout.EndArea();
+        GUIContent content = new GUIContent(text.ToString());
+        Vector2 size = GUI.skin.label.CalcSize(content);
+
+        GUI.Box(new Rect(Margin, Margin, size.x + 2f * Padding, size.y + 2f * Padding), GUIContent.none);
+        GUI.Label(new Rect(Margin + Padding, Margin + Padding, size.x, size.y), content);
     }
 }

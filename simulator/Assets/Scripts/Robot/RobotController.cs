@@ -47,8 +47,8 @@ public class RobotController : MonoBehaviour, IArenaResettable
     {
         destination[offset + 0] = ElapsedSeconds;
         destination[offset + 1] = ultrasonic.DistanceCm;
-        destination[offset + 2] = 50f;
-        destination[offset + 3] = 50f;
+        destination[offset + 2] = leftColor.Reflected;
+        destination[offset + 3] = rightColor.Reflected;
         destination[offset + 4] = leftMotor.GetDegrees();
         destination[offset + 5] = rightMotor.GetDegrees();
     }
