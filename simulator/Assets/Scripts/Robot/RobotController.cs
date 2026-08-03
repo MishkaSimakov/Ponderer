@@ -14,6 +14,7 @@ public class RobotController : MonoBehaviour, IArenaResettable
     [SerializeField] LargeMotor rightMotor;
 
     // Brick output voltage. It depends on batteries.
+    static readonly Vector2 VoltageRange = new Vector2(6f, 9f);
     public float Voltage { get; private set; }
 
     // The brick's own clock, seconds since the episode started.
@@ -23,8 +24,11 @@ public class RobotController : MonoBehaviour, IArenaResettable
 
     public void OnArenaReset(ArenaContext ctx)
     {
-        Voltage = 8f;
         ElapsedSeconds = 0f;
+
+        // Domain Randomization
+        ArenaRandom rng = ctx.PhysicsRng(this);
+        Voltage = rng.Range(VoltageRange);
     }
 
     public void SetDuty(float left, float right)

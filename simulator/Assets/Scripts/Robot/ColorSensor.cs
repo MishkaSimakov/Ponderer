@@ -10,17 +10,23 @@ public class ColorSensor : MonoBehaviour, IArenaResettable
     int rays = 21;
 
     // Full apex angle of the cone, degrees.
-    float coneAngle = 40f;
+    static readonly Vector2 ConeAngleRange = new Vector2(38f, 42f);
+    float coneAngle;
+
     float range = 1f;
 
     // Per unit: texture byte to the reading of this physical sensor.
-    float gain = 1f;
-    float offset = 0f;
+    static readonly Vector2 GainRange = new Vector2(0.99f, 1.01f);
+    float gain;
+
+    static readonly Vector2 OffsetRange = new Vector2(-1f, 1f);
+    float offset;
+
     // Measured reading with nothing under the sensor.
     float missValue = 0f;
 
     // Spins the whole spiral about the cone axis, radians.
-    float phiOffset = 0f;
+    float phiOffset;
 
     // ratio between values in MODE_REF_RAW and values in MODE_COL_REFLECT
     float rawToReflectedCoef = 0.3f;
@@ -31,10 +37,13 @@ public class ColorSensor : MonoBehaviour, IArenaResettable
 
     public void OnArenaReset(ArenaContext ctx)
     {
-        // Domain randomization:
-        // - coneAngle
-        // - gain
-        // - phiOffset
+        // Domain Randomization
+        ArenaRandom rng = ctx.PhysicsRng(this);
+
+        coneAngle = rng.Range(ConeAngleRange);
+        gain = rng.Range(GainRange);
+        offset = rng.Range(OffsetRange);
+        phiOffset = rng.Range(new Vector2(0, Mathf.PI * 2));
     }
 
     public float Reflected

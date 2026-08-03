@@ -88,7 +88,7 @@ public class LargeMotor : MonoBehaviour, IArenaResettable
         float stable = 0.5f * EffectiveMass(direction.x * transform.forward + direction.y * transform.right)
                        * Vector2.Dot(slip, direction) / dt;
 
-        Debug.Log($"v = {velocity}, w = {angularVelocity}, |F| = {force.magnitude}, |F_fr| = {friction}, |F_st| = {stable}, slip = {alongSlip} x {sideSlip}");
+//        Debug.Log($"v = {velocity}, w = {angularVelocity}, |F| = {force.magnitude}, |F_fr| = {friction}, |F_st| = {stable}, slip = {alongSlip} x {sideSlip}");
 
         force = Vector2.ClampMagnitude(force, Mathf.Min(friction, stable));
 
@@ -104,8 +104,6 @@ public class LargeMotor : MonoBehaviour, IArenaResettable
         Vector3 axis = Vector3.Cross(transform.position - body.worldCenterOfMass, direction);
         Vector3 local = Quaternion.Inverse(body.rotation * body.inertiaTensorRotation) * axis;
         Vector3 inertia = body.inertiaTensor;
-        
-        Debug.Log(inertia.ToString("F6"));
 
         return 1f / (1f / body.mass
                      + Compliance(local.x, inertia.x)
