@@ -20,6 +20,8 @@ from shared.logs import run_prefix
 from shared.policies.constant import ConstantPolicy
 from shared.runner import LOG_COLUMNS
 
+from shared.policies.net import NetPolicy, load, newest
+
 
 def run(make_policy, port=5005, seed=0, steps=None, randomize_scenario=False, log=None):
     log = log or run_prefix("sim", "arena") + ".csv"
@@ -95,7 +97,7 @@ def main():
     parser.add_argument("--log", default=None, help="default: logs/sim/arena-<timestamp>.csv")
     args = parser.parse_args()
 
-    run(resolve(args.policy), port=args.port, seed=args.seed, steps=args.steps,
+    run(lambda: NetPolicy(load(newest())), port=args.port, seed=args.seed, steps=args.steps,
         randomize_scenario=args.randomize_scenario, log=args.log)
 
 
