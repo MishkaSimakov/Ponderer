@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Веса политики</title>
+<style>
+  :root {
+    --bg: #12141a;
+    --panel: #1a1d26;
+    --line: #2c3040;
+    --text: #e6e8ef;
+    --muted: #8b90a3;
+    --neg: 215;
+    --pos: 8;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  header {
+    display: flex; flex-wrap: wrap; gap: 20px; align-items: center;
+    padding: 14px 20px; border-bottom: 1px solid var(--line); background: var(--panel);
+    position: sticky; top: 0; z-index: 2;
+  }
+  h1 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: .01em; }
+  label.file {
+    padding: 6px 12px; border: 1px solid var(--line); border-radius: 6px;
+    cursor: pointer; background: #232733;
+  }
+  label.file:hover { border-color: #46506b; }
+  input[type=file] { display: none; }
+  .ctl { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+  .ctl input[type=range] { width: 150px; accent-color: #6f7ba6; }
+  .ctl output { color: var(--text); font-variant-numeric: tabular-nums; min-width: 34px; }
+  main { padding: 20px; }
+  #info { color: var(--muted); margin-bottom: 14px; }
+  #info b { color: var(--text); font-weight: 600; }
+  table { border-collapse: collapse; margin: 10px 0 18px; font-variant-numeric: tabular-nums; }
+  th, td { text-align: right; padding: 3px 14px 3px 0; }
+  th { color: var(--muted); font-weight: 500; }
+  td:first-child, th:first-child { text-align: left; }
+  #chart svg { display: block; width: 100%; height: auto; }
+  .edge { stroke-linecap: round; }
+  #chart.focus .edge { opacity: .04; }
+  #chart.focus .edge.on { opacity: 1; }
+  .node { stroke: #0c0e13; stroke-width: 1; }
+  .node:hover { stroke: var(--text); stroke-width: 1.5; }
+  .lbl { fill: var(--muted); font-size: 11px; }
+  .cap { fill: var(--text); font-size: 12px; }
+  #tip {
+    position: fixed; pointer-events: none; opacity: 0; transition: opacity .1s;
+    background: #000c; border: 1px solid var(--line); border-radius: 5px;
+    padding: 4px 8px; font-variant-numeric: tabular-nums; white-space: pre;
+  }
+  #drop {
+    position: fixed; inset: 0; background: #12141ae0; display: none;
+    align-items: center; justify-content: center; font-size: 20px; z-index: 5;
+  }
+  #drop.on { display: flex; }
+  .err { color: #ff8a80; }
+  .scale { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+  .scale i { width: 120px; height: 10px; border-radius: 5px; display: block; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Веса политики</h1>
+  <label class="file">Открыть .npz<input type="file" id="file" accept=".npz"></label>
+  <div class="ctl">порог
+    <input type="range" id="threshold" min="0" max="100" value="0">
+    <output id="thresholdOut">0%</output>
+  </div>
+  <div class="ctl">толщина
+    <input type="range" id="width" min="1" max="12" value="4" step="0.5">
+  </div>
+  <div class="scale">−<i id="ramp"></i>+</div>
+</header>
+
+<main>
+  <div id="info">Перетащи сюда файл из <code>policy/</code>.</div>
+  <div id="chart"></div>
+</main>
+
+<div id="tip"></div>
+<div id="drop">Отпусти файл</div>
+
+<script>
+const NPY_TYPES = {
+  f4: Float32Array, f8: Float64Array, i1: Int8Array, i2: Int16Array,
+  i4: Int32Array, i8: BigInt64Array, u1: Uint8Array, u4: Uint32Array, b1: Uint8Array,
+};
+
+async function inflateRaw(bytes) {
+  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+async function readZip(buffer) {
+  const view = new DataView(buffer);
+  let eocd = -1;
+  for (let i = buffer.byteLength - 22; i >= 0; i--) {
+    if (view.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+  }
+  if (eocd < 0) throw new Error("это не npz: не найден конец zip");
+
+  const count = view.getUint16(eocd + 10, true);
+  let p = view.getUint32(eocd + 16, true);
+  const files = {};
+
+  for (let n = 0; n < count; n++) {
+    if (view.getUint32(p, true) !== 0x02014b50) throw new Error("битый каталог zip");
+    const method = view.getUint16(p + 10, true);
+    const size = view.getUint32(p + 20, true);
+    const nameLen = view.getUint16(p + 28, true);
+    const extraLen = view.getUint16(p + 30, true);
+    const commentLen = view.getUint16(p + 32, true);
+    const local = view.getUint32(p + 42, true);
+    const name = new TextDecoder().decode(new Uint8Array(buffer, p + 46, nameLen));
+
+    const start = local + 30 + view.getUint16(local + 26, true) + view.getUint16(local + 28, true);
+    let bytes = new Uint8Array(buffer, start, size);
+    if (method === 8) bytes = await inflateRaw(bytes);
+    else if (method !== 0) throw new Error("неизвестное сжатие zip: " + method);
+
+    files[name.replace(/\.npy$/, "")] = bytes;
+    p += 46 + nameLen + extraLen + commentLen;
+  }
+  return files;
+}
+
+function readNpy(bytes) {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const version = bytes[6];
+  const headerLen = version === 1 ? view.getUint16(8, true) : view.getUint32(8, true);
+  const offset = (version === 1 ? 10 : 12) + headerLen;
+  const header = new TextDecoder().decode(bytes.subarray(version === 1 ? 10 : 12, offset));
+
+  const descr = /'descr':\s*'([^']+)'/.exec(header)[1];
+  const shapeText = /'shape':\s*\(([^)]*)\)/.exec(header)[1];
+  const shape = shapeText.split(",").filter(s => s.trim()).map(Number);
+  if (/'fortran_order':\s*True/.test(header)) throw new Error("fortran order не поддержан");
+
+  const count = shape.reduce((a, b) => a * b, 1);
+  const kind = descr.slice(1);
+  const raw = bytes.slice(offset).buffer;
+
+  if (kind[0] === "U") {
+    const chars = new Uint32Array(raw, 0, count * Number(kind.slice(1)));
+    return { shape, value: String.fromCodePoint(...chars).replace(/\0+$/, "") };
+  }
+  const Type = NPY_TYPES[kind];
+  if (!Type) throw new Error("не поддержан dtype " + descr);
+  const data = new Type(raw, 0, count);
+  return { shape, data: kind === "i8" ? Array.from(data, Number) : data };
+}
+
+async function readModel(buffer) {
+  const files = await readZip(buffer);
+  const out = {};
+  for (const name in files) out[name] = readNpy(files[name]);
+  return out;
+}
+
+function layersOf(model) {
+  const arch = model["arch"].value;
+  if (arch !== "mlp") throw new Error("здесь только mlp, а в файле " + arch);
+
+  const names = [];
+  for (let i = 0; i < model["pi_layers"].data[0]; i++) names.push("pi." + i);
+  names.push("action");
+
+  return names.map(name => {
+    const w = model[name + ".w"];
+    return { name, out: w.shape[0], in: w.shape[1], w: w.data, b: model[name + ".b"].data };
+  });
+}
+
+const INPUTS = ["left_color", "right_color", "left_speed", "right_speed"];
+const OUTPUTS = ["left duty", "right duty"];
+
+const R = 6, GAP = 22, PAD_Y = 34, PAD_X = 130, COL = 260;
+
+function color(t) {
+  const hue = t < 0 ? 215 : 8;
+  const mag = Math.min(1, Math.abs(t));
+  return `hsl(${hue} 85% ${42 + 22 * (1 - mag)}%)`;
+}
+
+function draw(layers, threshold, maxWidth) {
+  const sizes = [layers[0].in, ...layers.map(l => l.out)];
+  const height = Math.max(...sizes) * GAP + PAD_Y * 2;
+  const width = PAD_X * 2 + COL * layers.length;
+  const x = i => PAD_X + COL * i;
+  const y = (li, i) => (height - (sizes[li] - 1) * GAP) / 2 + i * GAP;
+
+  const edges = [], nodes = [], labels = [];
+
+  layers.forEach((layer, li) => {
+    let max = 0;
+    for (const v of layer.w) max = Math.max(max, Math.abs(v));
+
+    for (let o = 0; o < layer.out; o++) {
+      for (let i = 0; i < layer.in; i++) {
+        const w = layer.w[o * layer.in + i];
+        const t = w / max;
+        if (Math.abs(t) < threshold) continue;
+        const thick = 0.25 + maxWidth * Math.pow(Math.abs(t), 1.6);
+        edges.push(`<line class="edge" x1="${x(li)}" y1="${y(li, i).toFixed(1)}" `
+          + `x2="${x(li + 1)}" y2="${y(li + 1, o).toFixed(1)}" stroke="${color(t)}" `
+          + `stroke-width="${thick.toFixed(2)}" stroke-opacity="${(0.12 + 0.78 * Math.abs(t)).toFixed(3)}" `
+          + `data-src="${li}:${i}" data-dst="${li + 1}:${o}" data-v="${w.toFixed(4)}" `
+          + `data-name="${layer.name} [${o},${i}]"></line>`);
+      }
+    }
+
+    let bmax = 0;
+    for (const v of layer.b) bmax = Math.max(bmax, Math.abs(v));
+    for (let o = 0; o < layer.out; o++) {
+      nodes.push(`<circle class="node" cx="${x(li + 1)}" cy="${y(li + 1, o).toFixed(1)}" r="${R}" `
+        + `fill="${color(bmax ? layer.b[o] / bmax : 0)}" data-key="${li + 1}:${o}" `
+        + `data-v="${layer.b[o].toFixed(4)}" data-name="${layer.name}.b [${o}]"></circle>`);
+    }
+    labels.push(`<text class="cap" x="${x(li + 1)}" y="16" text-anchor="middle">`
+      + `${layer.name} ${layer.in}→${layer.out}</text>`);
+  });
+
+  for (let i = 0; i < sizes[0]; i++) {
+    nodes.push(`<circle class="node" cx="${x(0)}" cy="${y(0, i).toFixed(1)}" r="${R}" `
+      + `fill="#4a5164" data-key="0:${i}" data-name="${INPUTS[i] || "in " + i}"></circle>`);
+    labels.push(`<text class="lbl" x="${x(0) - 14}" y="${(y(0, i) + 4).toFixed(1)}" `
+      + `text-anchor="end">${INPUTS[i] || i}</text>`);
+  }
+  const last = sizes.length - 1;
+  for (let o = 0; o < sizes[last]; o++) {
+    labels.push(`<text class="lbl" x="${x(last) + 14}" y="${(y(last, o) + 4).toFixed(1)}">`
+      + `${OUTPUTS[o] || o}</text>`);
+  }
+
+  return `<svg viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">`
+    + edges.join("") + nodes.join("") + labels.join("") + "</svg>";
+}
+
+function stats(layers) {
+  const rows = layers.map(l => {
+    let max = 0, sum = 0;
+    for (const v of l.w) { max = Math.max(max, Math.abs(v)); sum += Math.abs(v); }
+    let bmax = 0;
+    for (const v of l.b) bmax = Math.max(bmax, Math.abs(v));
+    return `<tr><td>${l.name}</td><td>${l.in}×${l.out}</td><td>${max.toFixed(3)}</td>`
+      + `<td>${(sum / l.w.length).toFixed(3)}</td><td>${bmax.toFixed(3)}</td></tr>`;
+  });
+  return `<table><tr><th>слой</th><th>форма</th><th>max |w|</th><th>сред |w|</th>`
+    + `<th>max |b|</th></tr>${rows.join("")}</table>`;
+}
+
+const chart = document.getElementById("chart");
+const info = document.getElementById("info");
+const tip = document.getElementById("tip");
+const threshold = document.getElementById("threshold");
+const thresholdOut = document.getElementById("thresholdOut");
+const widthCtl = document.getElementById("width");
+
+document.getElementById("ramp").style.background =
+  `linear-gradient(90deg, ${color(-1)}, ${color(-0.2)}, ${color(0.2)}, ${color(1)})`;
+
+let current = null;
+
+function render() {
+  if (!current) return;
+  thresholdOut.textContent = threshold.value + "%";
+  chart.innerHTML = draw(current.layers, threshold.value / 100, Number(widthCtl.value));
+}
+
+threshold.addEventListener("input", render);
+widthCtl.addEventListener("input", render);
+
+async function open(file) {
+  try {
+    const model = await readModel(await file.arrayBuffer());
+    const layers = layersOf(model);
+    current = { layers };
+    const total = layers.reduce((n, l) => n + l.w.length + l.b.length, 0);
+    info.innerHTML = `<b>${file.name}</b> · mlp · ${total} параметров` + stats(layers);
+    render();
+  } catch (e) {
+    current = null;
+    chart.innerHTML = "";
+    info.innerHTML = `<span class="err">${e.message}</span>`;
+  }
+}
+
+document.getElementById("file").addEventListener("change", e => {
+  if (e.target.files[0]) open(e.target.files[0]);
+});
+
+const drop = document.getElementById("drop");
+document.addEventListener("dragover", e => { e.preventDefault(); drop.classList.add("on"); });
+document.addEventListener("dragleave", e => { if (e.relatedTarget === null) drop.classList.remove("on"); });
+document.addEventListener("drop", e => {
+  e.preventDefault();
+  drop.classList.remove("on");
+  if (e.dataTransfer.files[0]) open(e.dataTransfer.files[0]);
+});
+
+chart.addEventListener("mouseover", e => {
+  const el = e.target;
+  if (el.tagName !== "circle" && el.tagName !== "line") return;
+
+  if (el.tagName === "circle") {
+    const key = el.dataset.key;
+    chart.classList.add("focus");
+    for (const edge of chart.querySelectorAll(".edge")) {
+      edge.classList.toggle("on", edge.dataset.src === key || edge.dataset.dst === key);
+    }
+  }
+  tip.textContent = el.dataset.name + (el.dataset.v ? "  " + el.dataset.v : "");
+  tip.style.opacity = 1;
+});
+
+chart.addEventListener("mouseout", e => {
+  if (e.target.tagName === "circle") chart.classList.remove("focus");
+  tip.style.opacity = 0;
+});
+
+document.addEventListener("mousemove", e => {
+  tip.style.left = Math.min(e.clientX + 14, innerWidth - tip.offsetWidth - 8) + "px";
+  tip.style.top = (e.clientY + 18) + "px";
+});
+</script>
+</body>
+</html>
