@@ -26,7 +26,7 @@ public class TrackController : MonoBehaviour, IArenaResettable
     [SerializeField] Color backgroundColor = Color.white;
     [SerializeField] float lineWidth = 0.015f;
     // 1/m: the tightest turn the line is allowed to take.
-    [SerializeField] float maxCurvature = 4f;
+    [SerializeField] float maxCurvature = 5f;
     [SerializeField] float margin = 0.05f;
     // Meters between the curvature control points the line interpolates through.
     [SerializeField] float curvatureLength = 0.25f;

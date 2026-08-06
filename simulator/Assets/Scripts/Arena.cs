@@ -69,7 +69,12 @@ public class Arena : MonoBehaviour
         episodeReward = 0f;
 
         ArenaContext ctx = new ArenaContext(transform, seed, scenario, physics);
-        for (int i = 0; i < resettables.Length; i++) resettables[i].OnArenaReset(ctx);
+        for (int i = 0; i < resettables.Length; i++)
+        {
+            // Switched off in the inspector: its Awake never ran, so it must not run.
+            if (!((Behaviour)resettables[i]).isActiveAndEnabled) continue;
+            resettables[i].OnArenaReset(ctx);
+        }
 
         // Transform writes are not visible to raycasts until physics is synced,
         // and reset must not simulate.

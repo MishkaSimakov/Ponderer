@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 // Motor doesn't rotate wheels. Instead, it applies a force directly to the point to which this MonoBehaviour is attached.
@@ -12,6 +13,7 @@ public class LargeMotor : MonoBehaviour, IArenaResettable
     float frictionCoef = 0.6f; // mu
     float longitudinalStiffness = 100f; // k_x
     float lateralStiffness = 100f; // k_y
+    float dutyLatency = 0.1f; // s between a duty command and its effect
 
     static readonly Vector2 ForwardSpeedPerVoltRange = new Vector2(0.042f, 0.045f);
     static readonly Vector2 ForwardFrictionSpeedRange = new Vector2(0.01f, 0.03f);
@@ -26,6 +28,8 @@ public class LargeMotor : MonoBehaviour, IArenaResettable
     private Rigidbody body;
     private RobotController robotController;
     private float duty; // D_i, [-1, 1]
+    private readonly Queue<(float time, float duty)> pendingDuties = new();
+    private float time;
 
     private float angle; // theta_i, rad
 
@@ -41,6 +45,8 @@ public class LargeMotor : MonoBehaviour, IArenaResettable
     {
         duty = 0f;
         angle = 0f;
+        time = 0f;
+        pendingDuties.Clear();
 
         // Domain Randomization
         ArenaRandom rng = ctx.PhysicsRng(this);
@@ -53,7 +59,7 @@ public class LargeMotor : MonoBehaviour, IArenaResettable
 
     public void SetDuty(float value)
     {
-        duty = Mathf.Clamp(value, -100f, 100f) / 100f;
+        pendingDuties.Enqueue((time + dutyLatency, Mathf.Clamp(value, -100f, 100f) / 100f));
     }
 
     public float GetDegrees()
@@ -63,6 +69,9 @@ public class LargeMotor : MonoBehaviour, IArenaResettable
 
     public void Tick(float dt)
     {
+        while (pendingDuties.Count > 0 && pendingDuties.Peek().time <= time) duty = pendingDuties.Dequeue().duty;
+        time += dt;
+
         float voltage = robotController.Voltage * duty;
         float speedPerVolt = voltage >= 0f ? forwardSpeedPerVolt : reverseSpeedPerVolt;
         float frictionSpeed = voltage >= 0f ? forwardFrictionSpeed : reverseFrictionSpeed;
