@@ -13,7 +13,9 @@ public class LargeMotor : MonoBehaviour, IArenaResettable
     float frictionCoef = 0.6f; // mu
     float longitudinalStiffness = 100f; // k_x
     float lateralStiffness = 100f; // k_y
-    float dutyLatency = 0.1f; // s between a duty command and its effect
+
+    static readonly Vector2 DutyLatencyRange = new Vector2(0f, 0.1f);
+    float dutyLatency; // s between a duty command and its effect
 
     static readonly Vector2 ForwardSpeedPerVoltRange = new Vector2(0.042f, 0.045f);
     static readonly Vector2 ForwardFrictionSpeedRange = new Vector2(0.01f, 0.03f);
@@ -50,6 +52,8 @@ public class LargeMotor : MonoBehaviour, IArenaResettable
 
         // Domain Randomization
         ArenaRandom rng = ctx.PhysicsRng(this);
+
+        dutyLatency = rng.Range(DutyLatencyRange);
 
         forwardSpeedPerVolt = rng.Range(ForwardSpeedPerVoltRange);
         forwardFrictionSpeed = rng.Range(ForwardFrictionSpeedRange);

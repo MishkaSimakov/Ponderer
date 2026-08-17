@@ -23,7 +23,8 @@ DUTY = 100.0
 
 
 def make(env=None, num_envs=1, arenas=1, base_port=5005, seed=0, graphics=False,
-         timeout=60.0, log_prefix=None, extra=(), randomize_scenario=True):
+         timeout=60.0, log_prefix=None, extra=(), randomize_scenario=True,
+         randomize_physics=True):
     """Launch num_envs players from env, or attach to that many running ones."""
     ports = [base_port + i for i in range(num_envs)]
     processes = [] if env is None else [
@@ -40,14 +41,16 @@ def make(env=None, num_envs=1, arenas=1, base_port=5005, seed=0, graphics=False,
             process.kill()
         raise
 
-    return SimVecEnv(sims, processes, randomize_scenario=randomize_scenario)
+    return SimVecEnv(sims, processes, randomize_scenario=randomize_scenario,
+                     randomize_physics=randomize_physics)
 
 
 class SimVecEnv(VecEnv):
-    def __init__(self, sims, processes=(), randomize_scenario=True):
+    def __init__(self, sims, processes=(), randomize_scenario=True, randomize_physics=True):
         self.sims = list(sims)
         self.processes = list(processes)
         self.randomize_scenario = randomize_scenario
+        self.randomize_physics = randomize_physics
         self.features = None
 
         super().__init__(
@@ -57,8 +60,10 @@ class SimVecEnv(VecEnv):
         )
 
     def reset(self):
+        # Unity keeps these flags for the auto resets it does without python.
         obs = [o for sim in self.sims
-               for o in sim.reset(randomize_scenario=self.randomize_scenario).obs]
+               for o in sim.reset(randomize_scenario=self.randomize_scenario,
+                                  randomize_physics=self.randomize_physics).obs]
         self.features = [Features() for _ in range(self.num_envs)]
         return np.array([f.first(o) for f, o in zip(self.features, obs)], np.float32)
 

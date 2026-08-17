@@ -46,6 +46,7 @@ def main():
     parser.add_argument("--gae-lambda", type=float, default=0.95)
     parser.add_argument("--ent-coef", type=float, default=0.0)
     parser.add_argument("--no-randomize-scenario", action="store_true")
+    parser.add_argument("--no-randomize-physics", action="store_true")
     parser.add_argument("--run-name", default=None)
     parser.add_argument("--env-args", nargs=argparse.REMAINDER, default=[],
                         help="everything after it goes to the player's command line")
@@ -76,6 +77,7 @@ def main():
         log_prefix=os.path.join(UNITY_LOGS, name),
         extra=args.env_args,
         randomize_scenario=not args.no_randomize_scenario,
+        randomize_physics=not args.no_randomize_physics,
     )
 
     # A run ends by hand or because unity stopped. Either way the weights are the point
