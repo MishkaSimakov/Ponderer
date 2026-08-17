@@ -24,9 +24,12 @@ class Unity:
         command += list(extra)
 
         print("starting %s" % " ".join(command))
+        # A headless linux host has neither wayland nor x11, and the player segfaults
+        # while naming the window backend it did not find. The dummy driver is one.
+        environment = os.environ if graphics else dict(os.environ, SDL_VIDEODRIVER="dummy")
         # Own session: ctrl-c goes to the terminal's whole process group, and a
         # player killed mid-request leaves python reading a socket nobody answers.
-        self.process = subprocess.Popen(command, start_new_session=True)
+        self.process = subprocess.Popen(command, start_new_session=True, env=environment)
         atexit.register(self.kill)
 
     def stop(self, timeout=10.0):
