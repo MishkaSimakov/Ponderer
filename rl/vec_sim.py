@@ -5,42 +5,74 @@ obs belongs to the next episode and the finished one's last observation travels
 beside it. SB3 reads that last observation from infos["terminal_observation"] and
 bootstraps the value function only when "TimeLimit.truncated" is also set, which
 is what separating terminated from truncated is for.
+
+One VecEnv spans every unity process: the arenas of instance 0 come first, then
+those of instance 1, and so on.
 """
 
 import numpy as np
 from gymnasium import spaces
 from stable_baselines3.common.vec_env import VecEnv
 
-from bridge.sim_robot import Simulation
+from bridge.launcher import Unity
+from bridge.sim_robot import Simulation, Step
 from shared.features import DIM, Features
 
 # Actions live in [-1, 1] so the gaussian policy is symmetric; unity takes percent.
 DUTY = 100.0
 
 
+def make(env=None, num_envs=1, arenas=1, base_port=5005, seed=0, graphics=False,
+         timeout=60.0, log_prefix=None, extra=(), randomize_scenario=True):
+    """Launch num_envs players from env, or attach to that many running ones."""
+    ports = [base_port + i for i in range(num_envs)]
+    processes = [] if env is None else [
+        Unity(env, port, arenas, graphics=graphics, extra=extra,
+              log=None if log_prefix is None else "%s-%d.log" % (log_prefix, port))
+        for port in ports]
+
+    try:
+        # Instances must not replay the same episodes, so each gets its own seed root.
+        sims = [Simulation(port=port, session_seed=seed + i, timeout=timeout)
+                for i, port in enumerate(ports)]
+    except Exception:
+        for process in processes:
+            process.kill()
+        raise
+
+    return SimVecEnv(sims, processes, randomize_scenario=randomize_scenario)
+
+
 class SimVecEnv(VecEnv):
-    def __init__(self, port=5005, host="127.0.0.1", seed=0, randomize_scenario=True):
-        self.sim = Simulation(port=port, host=host, session_seed=seed)
+    def __init__(self, sims, processes=(), randomize_scenario=True):
+        self.sims = list(sims)
+        self.processes = list(processes)
         self.randomize_scenario = randomize_scenario
         self.features = None
-        self.actions = None
 
         super().__init__(
-            self.sim.arenas,
+            sum(sim.arenas for sim in self.sims),
             spaces.Box(-np.inf, np.inf, (DIM,), np.float32),
-            spaces.Box(-1.0, 1.0, (self.sim.action_dim,), np.float32),
+            spaces.Box(-1.0, 1.0, (self.sims[0].action_dim,), np.float32),
         )
 
     def reset(self):
-        state = self.sim.reset(randomize_scenario=self.randomize_scenario)
+        obs = [o for sim in self.sims
+               for o in sim.reset(randomize_scenario=self.randomize_scenario).obs]
         self.features = [Features() for _ in range(self.num_envs)]
-        return np.array([f.first(o) for f, o in zip(self.features, state.obs)], np.float32)
+        return np.array([f.first(o) for f, o in zip(self.features, obs)], np.float32)
 
     def step_async(self, actions):
-        self.actions = actions * DUTY
+        actions = actions * DUTY
+        start = 0
+        for sim in self.sims:
+            sim.step_async(actions[start:start + sim.arenas])
+            start += sim.arenas
 
     def step_wait(self):
-        state = self.sim.step(self.actions)
+        states = [sim.step_wait() for sim in self.sims]
+        state = Step(*[[v for s in states for v in getattr(s, field)]
+                       for field in Step._fields])
 
         obs = np.empty((self.num_envs, DIM), np.float32)
         dones = np.empty(self.num_envs, bool)
@@ -65,7 +97,11 @@ class SimVecEnv(VecEnv):
         return obs, np.array(state.reward, np.float32), dones, infos
 
     def close(self):
-        self.sim.close()
+        # quit first, kill second: a player that obeys the command exits on its own.
+        for sim in self.sims:
+            sim.close()
+        for process in self.processes:
+            process.stop()
 
     def seed(self, seed=None):
         """Unity owns episode seeds: it derives them from the handshake's session_seed

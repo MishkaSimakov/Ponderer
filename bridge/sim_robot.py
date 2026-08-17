@@ -10,8 +10,8 @@ Step = namedtuple("Step", "obs terminal_obs reward terminated truncated episode 
 class Simulation:
     """All arenas of one Unity process, one round trip per control step."""
 
-    def __init__(self, port=5005, host="127.0.0.1", session_seed=0):
-        self.conn = Connection(host, port)
+    def __init__(self, port=5005, host="127.0.0.1", session_seed=0, timeout=30.0):
+        self.conn = Connection(host, port, timeout=timeout)
         info = self.conn.request({
             "cmd": "handshake",
             "version": PROTOCOL_VERSION,
@@ -43,10 +43,18 @@ class Simulation:
         return self._unpack(self.conn.request(message))
 
     def step(self, actions):
+        self.step_async(actions)
+        return self.step_wait()
+
+    def step_async(self, actions):
+        """Sending without reading lets several unity processes compute at once."""
         if len(actions) != self.arenas:
             raise ValueError("expected %d actions" % self.arenas)
         flat = [float(v) for action in actions for v in action]
-        return self._unpack(self.conn.request({"cmd": "step", "actions": flat}))
+        self.conn.send({"cmd": "step", "actions": flat})
+
+    def step_wait(self):
+        return self._unpack(self.conn.recv())
 
     def close(self):
         print("quit")

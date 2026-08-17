@@ -29,8 +29,13 @@ class Connection:
         print("connected after %.1fs" % (time.monotonic() - start))
 
     def request(self, message):
+        self.send(message)
+        return self.recv()
+
+    def send(self, message):
         self.sock.sendall(json.dumps(message).encode() + b"\n")
 
+    def recv(self):
         while b"\n" not in self.buffer:
             chunk = self.sock.recv(1 << 16)
             if not chunk:
@@ -39,9 +44,6 @@ class Connection:
 
         line, self.buffer = self.buffer.split(b"\n", 1)
         return json.loads(line.decode())
-
-    def send(self, message):
-        self.sock.sendall(json.dumps(message).encode() + b"\n")
 
     def close(self):
         self.sock.close()

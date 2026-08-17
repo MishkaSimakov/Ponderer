@@ -5,16 +5,14 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import VecFrameStack, VecMonitor
 
 from rl.extractors import CausalWindow
-from rl.vec_sim import SimVecEnv
 
 ARCHS = ("mlp", "lstm", "transformer")
 
 
-def build(arch, port=5005, seed=0, hidden=32, window=8, randomize_scenario=True,
-          tensorboard_log=None, **ppo_kwargs):
+def build(arch, env, seed=0, hidden=32, window=8, tensorboard_log=None, **ppo_kwargs):
     # VecMonitor is what turns dones into the episode returns and lengths that end up
     # in tensorboard; unity's own step counter is zeroed by the auto reset.
-    env = VecMonitor(SimVecEnv(port=port, seed=seed, randomize_scenario=randomize_scenario))
+    env = VecMonitor(env)
     common = dict(seed=seed, tensorboard_log=tensorboard_log, verbose=1, **ppo_kwargs)
 
     if arch == "mlp":
