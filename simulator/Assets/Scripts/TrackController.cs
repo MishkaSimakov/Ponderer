@@ -24,7 +24,9 @@ public class TrackController : MonoBehaviour, IArenaResettable
     [SerializeField] int resolution = 512;
     [SerializeField] Color lineColor = Color.black;
     [SerializeField] Color backgroundColor = Color.white;
-    [SerializeField] float lineWidth = 0.015f;
+
+    static readonly Vector2 LineWidthRange = new Vector2(0.024f, 0.026f);
+    float lineWidth;
     // 1/m: the tightest turn the line is allowed to take.
     [SerializeField] float maxCurvature = 5f;
     [SerializeField] float margin = 0.05f;
@@ -119,6 +121,10 @@ public class TrackController : MonoBehaviour, IArenaResettable
 
     public void OnArenaReset(ArenaContext ctx)
     {
+        // Domain Randomization
+        ArenaRandom rng = ctx.PhysicsRng(this);
+        lineWidth = rng.Range(LineWidthRange);
+
         Generate(ctx.ScenarioRng(this));
         Rasterize();
     }

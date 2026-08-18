@@ -1,10 +1,9 @@
-using System.Collections.Generic;
 using UnityEngine;
 
 // Motor doesn't rotate wheels. Instead, it applies a force directly to the point to which this MonoBehaviour is attached.
-// The wheel is a velocity source: its cruise speed is the measured law alpha * |U| - beta, with separate constants per
-// direction, and the contact force is linear in slip velocity, saturated by the friction circle
-// and by what one step can absorb without reversing the slip.
+// The wheel is a velocity source: it approaches the measured cruise law alpha * |U| - beta, with separate constants per
+// direction, as a first order lag with time constant tau. The contact force is linear in slip velocity, saturated by
+// the friction circle and by what one step can absorb without reversing the slip.
 // See the contact section of docs/motor_model.md.
 public class LargeMotor : MonoBehaviour, IArenaResettable
 {
@@ -14,8 +13,8 @@ public class LargeMotor : MonoBehaviour, IArenaResettable
     float longitudinalStiffness = 100f; // k_x
     float lateralStiffness = 100f; // k_y
 
-    static readonly Vector2 DutyLatencyRange = new Vector2(0f, 0.1f);
-    float dutyLatency; // s between a duty command and its effect
+    static readonly Vector2 SpeedTauRange = new Vector2(0.05f, 0.12f);
+    float speedTau; // tau, s to close 63% of the gap to cruise speed
 
     static readonly Vector2 ForwardSpeedPerVoltRange = new Vector2(0.042f, 0.045f);
     static readonly Vector2 ForwardFrictionSpeedRange = new Vector2(0.01f, 0.03f);
@@ -30,8 +29,7 @@ public class LargeMotor : MonoBehaviour, IArenaResettable
     private Rigidbody body;
     private RobotController robotController;
     private float duty; // D_i, [-1, 1]
-    private readonly Queue<(float time, float duty)> pendingDuties = new();
-    private float time;
+    private float speed; // v_i, m/s at the contact patch, lagging cruise speed
 
     private float angle; // theta_i, rad
 
@@ -46,14 +44,13 @@ public class LargeMotor : MonoBehaviour, IArenaResettable
     public void OnArenaReset(ArenaContext ctx)
     {
         duty = 0f;
+        speed = 0f;
         angle = 0f;
-        time = 0f;
-        pendingDuties.Clear();
 
         // Domain Randomization
         ArenaRandom rng = ctx.PhysicsRng(this);
 
-        dutyLatency = rng.Range(DutyLatencyRange);
+        speedTau = rng.Range(SpeedTauRange);
 
         forwardSpeedPerVolt = rng.Range(ForwardSpeedPerVoltRange);
         forwardFrictionSpeed = rng.Range(ForwardFrictionSpeedRange);
@@ -63,7 +60,7 @@ public class LargeMotor : MonoBehaviour, IArenaResettable
 
     public void SetDuty(float value)
     {
-        pendingDuties.Enqueue((time + dutyLatency, Mathf.Clamp(value, -100f, 100f) / 100f));
+        duty = Mathf.Clamp(value, -100f, 100f) / 100f;
     }
 
     public float GetDegrees()
@@ -73,9 +70,6 @@ public class LargeMotor : MonoBehaviour, IArenaResettable
 
     public void Tick(float dt)
     {
-        while (pendingDuties.Count > 0 && pendingDuties.Peek().time <= time) duty = pendingDuties.Dequeue().duty;
-        time += dt;
-
         float voltage = robotController.Voltage * duty;
         float speedPerVolt = voltage >= 0f ? forwardSpeedPerVolt : reverseSpeedPerVolt;
         float frictionSpeed = voltage >= 0f ? forwardFrictionSpeed : reverseFrictionSpeed;
@@ -83,7 +77,8 @@ public class LargeMotor : MonoBehaviour, IArenaResettable
         // Zero inside the dead zone |U| < beta / alpha, where friction wins.
         float cruiseSpeed = Mathf.Max(speedPerVolt * Mathf.Abs(voltage) - frictionSpeed, 0f)
                             * Mathf.Sign(voltage);
-        float angularVelocity = cruiseSpeed / wheelRadius;
+        speed += (cruiseSpeed - speed) * (1f - Mathf.Exp(-dt / speedTau));
+        float angularVelocity = speed / wheelRadius;
 
         // Velocity of the body point under the contact patch, in wheel axes.
         Vector3 velocity = body.GetPointVelocity(transform.position);
