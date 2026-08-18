@@ -7,7 +7,7 @@ using UnityEngine;
 // Python drives the simulation: one request advances one control step.
 public class Bridge : MonoBehaviour
 {
-    const int Version = 1;
+    const int Version = 2;
 
     [SerializeField] Arena arenaPrefab;
     [SerializeField] float arenaSpacing = 20f;
@@ -94,7 +94,8 @@ public class Bridge : MonoBehaviour
                     arenas = arenas.Length,
                     dt = controlPeriodMin + controlPeriodScale,
                     obs_dim = RobotController.ObsDim,
-                    action_dim = RobotController.ActionDim
+                    action_dim = RobotController.ActionDim,
+                    reward_terms = arenas[0].TermNames
                 });
 
             case "reset":
@@ -154,11 +155,13 @@ public class Bridge : MonoBehaviour
     StateResponse Gather()
     {
         int dim = RobotController.ObsDim;
+        int termCount = arenas[0].TermNames.Length;
         StateResponse state = new StateResponse
         {
             obs = new float[arenas.Length * dim],
             terminal_obs = new float[arenas.Length * dim],
             reward = new float[arenas.Length],
+            terms = new float[arenas.Length * termCount],
             terminated = new bool[arenas.Length],
             truncated = new bool[arenas.Length],
             episode = new int[arenas.Length],
@@ -174,6 +177,7 @@ public class Bridge : MonoBehaviour
             if (arenas[i].Terminated || arenas[i].Truncated)
                 arenas[i].ObserveTerminal(state.terminal_obs, i * dim);
             state.reward[i] = arenas[i].Reward;
+            Array.Copy(arenas[i].Terms, 0, state.terms, i * termCount, termCount);
             state.terminated[i] = arenas[i].Terminated;
             state.truncated[i] = arenas[i].Truncated;
             state.episode[i] = arenas[i].Episode;

@@ -22,6 +22,7 @@ public class HandshakeResponse
     public float dt;
     public int obs_dim;
     public int action_dim;
+    public string[] reward_terms;
 }
 
 [Serializable]
@@ -30,6 +31,8 @@ public class StateResponse
     public float[] obs;
     public float[] terminal_obs;
     public float[] reward;
+    // Flat, arenas * reward_terms: what each term contributed to reward.
+    public float[] terms;
     public bool[] terminated;
     public bool[] truncated;
     public int[] episode;

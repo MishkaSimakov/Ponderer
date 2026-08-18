@@ -17,6 +17,8 @@ public class Arena : MonoBehaviour
     IEpisodeCondition[] conditions;
     IReward[] rewards;
     readonly float[] terminalObs = new float[RobotController.ObsDim];
+    float[] termScratch;
+    float[] terms;
     RobotAction action;
     float episodeReward;
     int index;
@@ -31,6 +33,11 @@ public class Arena : MonoBehaviour
     public bool Truncated { get; private set; }
     public float Reward { get; private set; }
 
+    // One name per reward term, rewards first then conditions; Terms holds their
+    // values for the step Reward describes.
+    public string[] TermNames { get; private set; }
+    public float[] Terms { get { return terms; } }
+
     void Awake()
     {
         if (robot == null) throw new Exception("Arena.robot is not set on " + name);
@@ -43,6 +50,14 @@ public class Arena : MonoBehaviour
             .ToArray();
         conditions = GetComponentsInChildren<IEpisodeCondition>(true).ToArray();
         rewards = GetComponentsInChildren<IReward>(true).ToArray();
+
+        TermNames = rewards.Select(r => r.GetType().Name)
+            .Concat(conditions.Select(c => c.GetType().Name))
+            .ToArray();
+        if (TermNames.Distinct().Count() != TermNames.Length)
+            throw new Exception("two reward terms of the same type on " + name);
+        termScratch = new float[TermNames.Length];
+        terms = new float[TermNames.Length];
     }
 
     // Called on handshake: the session seed comes from python, not the command line.
@@ -65,6 +80,7 @@ public class Arena : MonoBehaviour
         Terminated = false;
         Truncated = false;
         Reward = 0f;
+        Array.Clear(terms, 0, terms.Length);
         action = default;
         episodeReward = 0f;
 
@@ -113,6 +129,7 @@ public class Arena : MonoBehaviour
         RewardContext ctx = new RewardContext(
             robot, action, sample, Mathf.Abs(sample.Offset) > offTrackDistance);
         float reward = 0f;
+        Array.Clear(termScratch, 0, termScratch.Length);
         for (int i = 0; i < rewards.Length; i++)
         {
             // A term is switched off by disabling its component in the inspector.
@@ -120,6 +137,7 @@ public class Arena : MonoBehaviour
 
             float value = rewards[i].Evaluate(in ctx);
             reward += value;
+            termScratch[i] = value;
             Trace(rewards[i], value);
         }
 
@@ -132,6 +150,7 @@ public class Arena : MonoBehaviour
             if (!conditions[i].Terminated) continue;
             terminated = true;
             reward += conditions[i].Reward;
+            termScratch[rewards.Length + i] = conditions[i].Reward;
             Trace(conditions[i], conditions[i].Reward);
         }
         bool truncated = !terminated && maxSteps > 0 && Step >= maxSteps;
@@ -149,6 +168,7 @@ public class Arena : MonoBehaviour
         }
 
         Reward = reward;
+        Array.Copy(termScratch, terms, terms.Length);
         Terminated = terminated;
         Truncated = truncated;
     }

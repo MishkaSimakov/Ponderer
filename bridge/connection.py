@@ -2,7 +2,7 @@ import json
 import socket
 import time
 
-PROTOCOL_VERSION = 1
+PROTOCOL_VERSION = 2
 
 
 class Connection:

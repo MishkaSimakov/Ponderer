@@ -52,6 +52,8 @@ class SimVecEnv(VecEnv):
         self.randomize_scenario = randomize_scenario
         self.randomize_physics = randomize_physics
         self.features = None
+        # Every instance runs the same build, so the term names are the same too.
+        self.reward_terms = self.sims[0].reward_terms
 
         super().__init__(
             sum(sim.arenas for sim in self.sims),
@@ -84,6 +86,8 @@ class SimVecEnv(VecEnv):
         infos = [{} for _ in range(self.num_envs)]
 
         for i in range(self.num_envs):
+            # What each reward component contributed to rewards[i], for logging only.
+            infos[i]["reward_terms"] = state.terms[i]
             dones[i] = state.terminated[i] or state.truncated[i]
             if not dones[i]:
                 obs[i] = self.features[i].update(state.obs[i])

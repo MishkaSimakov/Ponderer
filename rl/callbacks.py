@@ -27,22 +27,34 @@ class Stats(BaseCallback):
         self.lengths = []
         self.terminated = []
         self.rewards = []
+        self.terms = []
+        self.pending = None
         self.actions = []
         self.features = []
 
+    def _on_training_start(self):
+        self.names = self.training_env.unwrapped.reward_terms
+        # An episode spans rollouts, so the accumulator outlives them.
+        self.pending = np.zeros((self.training_env.num_envs, len(self.names)), np.float32)
+
     def _on_step(self):
         self.rewards.append(np.asarray(self.locals["rewards"], np.float32))
+        self.pending += np.asarray([info["reward_terms"] for info in self.locals["infos"]],
+                                   np.float32)
         self.actions.append(np.asarray(self.locals["clipped_actions"], np.float32))
         # Frame stacking widens the observation; the newest frame is last.
         self.features.append(np.asarray(self.locals["new_obs"], np.float32)[:, -DIM:])
 
-        for done, info in zip(self.locals["dones"], self.locals["infos"]):
+        for i, (done, info) in enumerate(zip(self.locals["dones"], self.locals["infos"])):
             if not done:
                 continue
             # VecMonitor put the episode's return and length here.
             self.returns.append(info["episode"]["r"])
             self.lengths.append(info["episode"]["l"])
             self.terminated.append(0.0 if info.get("TimeLimit.truncated") else 1.0)
+            # The terminal step is already in pending, so the row is the episode's total.
+            self.terms.append(self.pending[i].copy())
+            self.pending[i] = 0.0
 
         return True
 
@@ -55,7 +67,17 @@ class Stats(BaseCallback):
             record("rollout/terminated_frac", float(np.mean(self.terminated)))
             record("rollout/episodes", len(self.returns))
 
-        record("rollout/reward_hist", np.concatenate(self.rewards), exclude=HISTOGRAM)
+        rewards = np.concatenate(self.rewards)
+        record("rollout/reward_hist", rewards, exclude=HISTOGRAM)
+
+        # Per term, what it contributed to an episode's return: the means add up to
+        # rollout/ep_rew_mean, so the terms are readable against each other and against
+        # the score they explain. The histogram is over episodes.
+        if self.terms:
+            terms = np.array(self.terms, np.float32)
+            for i, name in enumerate(self.names):
+                record("reward/" + name, float(terms[:, i].mean()))
+                record("reward_hist/" + name, terms[:, i], exclude=HISTOGRAM)
 
         # Duty as unity receives it, so saturation is readable against the +-100 clamp.
         actions = np.concatenate(self.actions) * DUTY
@@ -73,5 +95,5 @@ class Stats(BaseCallback):
         record("train/value_hist", values, exclude=HISTOGRAM)
 
         for collected in (self.returns, self.lengths, self.terminated,
-                          self.rewards, self.actions, self.features):
+                          self.rewards, self.terms, self.actions, self.features):
             collected.clear()

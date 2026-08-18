@@ -4,7 +4,8 @@ from bridge.connection import Connection, PROTOCOL_VERSION
 
 # obs is the observation to act on next; terminal_obs is the last observation of a
 # finished episode and is meaningful only where terminated or truncated is set.
-Step = namedtuple("Step", "obs terminal_obs reward terminated truncated episode step")
+# terms breaks reward down by reward component, in the order of Simulation.reward_terms.
+Step = namedtuple("Step", "obs terminal_obs reward terms terminated truncated episode step")
 
 
 class Simulation:
@@ -25,8 +26,10 @@ class Simulation:
         self.dt = info["dt"]
         self.obs_dim = info["obs_dim"]
         self.action_dim = info["action_dim"]
+        self.reward_terms = info["reward_terms"]
         print("handshake: %d arenas, dt %.4f, obs_dim %d, action_dim %d, session_seed %d"
               % (self.arenas, self.dt, self.obs_dim, self.action_dim, session_seed))
+        print("reward terms: %s" % ", ".join(self.reward_terms))
 
     def reset(self, seeds=None, randomize_scenario=True, randomize_physics=False):
         message = {
@@ -68,11 +71,13 @@ class Simulation:
 
     def _unpack(self, response):
         dim = self.obs_dim
-        split = lambda key: [response[key][i * dim:(i + 1) * dim] for i in range(self.arenas)]
+        terms = len(self.reward_terms)
+        split = lambda key, n: [response[key][i * n:(i + 1) * n] for i in range(self.arenas)]
         return Step(
-            obs=split("obs"),
-            terminal_obs=split("terminal_obs"),
+            obs=split("obs", dim),
+            terminal_obs=split("terminal_obs", dim),
             reward=response["reward"],
+            terms=split("terms", terms),
             terminated=response["terminated"],
             truncated=response["truncated"],
             episode=response["episode"],
