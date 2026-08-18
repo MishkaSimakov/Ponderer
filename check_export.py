@@ -57,7 +57,7 @@ def main():
 
     rng = np.random.default_rng(0)
     features = np.concatenate([rng.random((args.steps, 2)),
-                               rng.uniform(-1.0, 1.0, (args.steps, 2))],
+                               rng.uniform(-1.0, 1.0, (args.steps, DIM - 2))],
                               axis=1).astype(np.float32)
 
     window = int(params["window"]) if arch == "transformer" else 1

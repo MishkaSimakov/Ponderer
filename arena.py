@@ -98,7 +98,10 @@ def main():
     parser.add_argument("--log", default=None, help="default: logs/sim/arena-<timestamp>.csv")
     args = parser.parse_args()
 
-    run(lambda: NetPolicy(load(newest())), port=args.port, seed=args.seed, steps=args.steps,
+    policy_factory = lambda: NetPolicy(load(newest()))
+    # policy_factory = lambda: ConstantPolicy((5, 5))
+
+    run(policy_factory, port=args.port, seed=args.seed, steps=args.steps,
         randomize_scenario=args.randomize_scenario, log=args.log, speed=args.speed)
 
 

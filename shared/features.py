@@ -2,7 +2,8 @@
 
 Raw observations carry the episode clock and absolute encoder angles, both of which
 grow without bound and cannot be fed to a network. What the policy sees instead is
-reflectance and wheel speed, in units that stay bounded for any episode length.
+reflectance and, when USE_SPEED is on, wheel speed, in units that stay bounded for
+any episode length.
 
 Speed comes from the observation's own clock, not the host's: a late tick on the
 brick is a longer step, and the feature has to see that or simulation and hardware
@@ -17,7 +18,10 @@ RIGHT_COLOR = COLUMNS.index("right_color")
 LEFT_POSITION = COLUMNS.index("left_position")
 RIGHT_POSITION = COLUMNS.index("right_position")
 
-NAMES = ["left_color", "right_color", "left_speed", "right_speed"]
+# Set to True to feed wheel speed to the network again.
+USE_SPEED = False
+
+NAMES = ["left_color", "right_color"] + (["left_speed", "right_speed"] if USE_SPEED else [])
 DIM = len(NAMES)
 
 # Reflected light is already 0..100. Wheel speed is scaled by the motor's no load
@@ -34,16 +38,19 @@ class Features:
         self.t = obs[T]
         self.left = obs[LEFT_POSITION]
         self.right = obs[RIGHT_POSITION]
-        return [obs[LEFT_COLOR] / COLOR_SCALE, obs[RIGHT_COLOR] / COLOR_SCALE, 0.0, 0.0]
+        return colors(obs) + ([0.0, 0.0] if USE_SPEED else [])
 
     def update(self, obs):
         dt = obs[T] - self.t
-        left_speed = (obs[LEFT_POSITION] - self.left) / dt
-        right_speed = (obs[RIGHT_POSITION] - self.right) / dt
+        speed = [(obs[LEFT_POSITION] - self.left) / dt / SPEED_SCALE,
+                 (obs[RIGHT_POSITION] - self.right) / dt / SPEED_SCALE]
 
         self.t = obs[T]
         self.left = obs[LEFT_POSITION]
         self.right = obs[RIGHT_POSITION]
 
-        return [obs[LEFT_COLOR] / COLOR_SCALE, obs[RIGHT_COLOR] / COLOR_SCALE,
-                left_speed / SPEED_SCALE, right_speed / SPEED_SCALE]
+        return colors(obs) + (speed if USE_SPEED else [])
+
+
+def colors(obs):
+    return [obs[LEFT_COLOR] / COLOR_SCALE, obs[RIGHT_COLOR] / COLOR_SCALE]
