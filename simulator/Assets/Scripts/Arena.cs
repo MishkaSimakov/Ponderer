@@ -111,7 +111,7 @@ public class Arena : MonoBehaviour
     public void ApplyAction(float left, float right)
     {
         action = new RobotAction(left, right);
-        robot.SetDuty(left, right);
+        robot.SetVolts(left, right);
     }
 
     // Used instead of FixedUpdate.

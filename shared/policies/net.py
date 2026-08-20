@@ -11,13 +11,13 @@ import os
 
 import numpy as np
 
+from shared.action import VOLTS
 from shared.features import Features
 from shared.policy import Policy
 
 ROOT = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "policy")
 
-DUTY = 100.0
 EPS = 1e-5
 
 
@@ -74,7 +74,7 @@ class NetPolicy(Policy):
         for i in range(int(self.p["pi_layers"])):
             h = np.tanh(linear(self.p, "pi.%d" % i, h))
 
-        action = np.clip(linear(self.p, "action", h), -1.0, 1.0) * DUTY
+        action = np.clip(linear(self.p, "action", h), -1.0, 1.0) * VOLTS
         return float(action[0]), float(action[1])
 
     def _lstm(self, x):

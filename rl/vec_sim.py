@@ -16,10 +16,8 @@ from stable_baselines3.common.vec_env import VecEnv
 
 from bridge.launcher import Unity
 from bridge.sim_robot import Simulation, Step
+from shared.action import VOLTS
 from shared.features import DIM, Features
-
-# Actions live in [-1, 1] so the gaussian policy is symmetric; unity takes percent.
-DUTY = 100.0
 
 
 def make(env=None, num_envs=1, arenas=1, base_port=5005, seed=0, graphics=False,
@@ -70,7 +68,8 @@ class SimVecEnv(VecEnv):
         return np.array([f.first(o) for f, o in zip(self.features, obs)], np.float32)
 
     def step_async(self, actions):
-        actions = actions * DUTY
+        # Actions live in [-1, 1] so the gaussian policy is symmetric; unity takes volts.
+        actions = actions * VOLTS
         start = 0
         for sim in self.sims:
             sim.step_async(actions[start:start + sim.arenas])

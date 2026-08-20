@@ -2,7 +2,7 @@ import time
 
 from shared.observation import COLUMNS
 
-LOG_COLUMNS = ["duty_left", "duty_right"] + COLUMNS
+LOG_COLUMNS = ["volts_left", "volts_right"] + COLUMNS
 
 
 def run(robot, policy, logger, steps, period=None):

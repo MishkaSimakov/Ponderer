@@ -13,7 +13,8 @@ public class RobotController : MonoBehaviour, IArenaResettable
     [SerializeField] LargeMotor leftMotor;
     [SerializeField] LargeMotor rightMotor;
 
-    // Brick output voltage. It depends on batteries.
+    // Brick output voltage. It depends on batteries. The action is a voltage the brick
+    // compensates for charge, so this only caps what a motor can be given.
     static readonly Vector2 VoltageRange = new Vector2(6f, 9f);
     public float Voltage { get; private set; }
 
@@ -31,10 +32,10 @@ public class RobotController : MonoBehaviour, IArenaResettable
         Voltage = rng.Range(VoltageRange);
     }
 
-    public void SetDuty(float left, float right)
+    public void SetVolts(float left, float right)
     {
-        leftMotor.SetDuty(left);
-        rightMotor.SetDuty(right);
+        leftMotor.SetVolts(left);
+        rightMotor.SetVolts(right);
     }
 
     // Called once per physics substep by Bridge, never from FixedUpdate: manual

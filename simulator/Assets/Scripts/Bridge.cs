@@ -7,7 +7,7 @@ using UnityEngine;
 // Python drives the simulation: one request advances one control step.
 public class Bridge : MonoBehaviour
 {
-    const int Version = 2;
+    const int Version = 3;
 
     [SerializeField] Arena arenaPrefab;
     [SerializeField] float arenaSpacing = 20f;

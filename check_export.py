@@ -15,9 +15,10 @@ from sb3_contrib import RecurrentPPO
 from stable_baselines3 import PPO
 
 from rl.export import ROOT as POLICY_ROOT
+from shared.action import VOLTS
 from shared.features import DIM
 from shared.logs import ROOT as LOGS_ROOT
-from shared.policies.net import DUTY, NetPolicy, load
+from shared.policies.net import NetPolicy, load
 
 ALGOS = {"mlp": PPO, "lstm": RecurrentPPO, "transformer": PPO}
 
@@ -39,7 +40,7 @@ def trained_actions(model, arch, features, window):
         action, state = model.predict(obs[None], state=state, episode_start=starts,
                                       deterministic=True)
         starts = np.zeros(1, bool)
-        actions.append(action[0] * DUTY)
+        actions.append(action[0] * VOLTS)
 
     return np.array(actions)
 
@@ -48,7 +49,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("name", help="run name, as passed to train.py --run-name")
     parser.add_argument("--steps", type=int, default=256)
-    parser.add_argument("--tolerance", type=float, default=1e-3, help="duty percent")
+    parser.add_argument("--tolerance", type=float, default=1e-3, help="volts")
     args = parser.parse_args()
 
     params = load(os.path.join(POLICY_ROOT, args.name + ".npz"))
@@ -67,7 +68,7 @@ def main():
     ported = np.array([policy.act_features(x) for x in features])
 
     error = np.abs(reference - ported).max()
-    print("%s: %d steps, max duty error %.3e" % (arch, args.steps, error))
+    print("%s: %d steps, max volts error %.3e" % (arch, args.steps, error))
     if error > args.tolerance:
         raise SystemExit("export does not match the trained policy")
 

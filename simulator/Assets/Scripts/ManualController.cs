@@ -19,7 +19,7 @@ public class ManualController : MonoBehaviour
     Arena arena;
     int substeps;
     float accumulator;
-    float level = 50f;
+    float level = 4f; // volts
     float left;
     float right;
     readonly float[] obs = new float[RobotController.ObsDim];
@@ -43,14 +43,14 @@ public class ManualController : MonoBehaviour
         Keyboard kb = Keyboard.current;
 
         if (kb.rKey.wasPressedThisFrame) arena.ResetEpisode(randomize, randomize, arena.NextSeed());
-        if (kb.equalsKey.wasPressedThisFrame || kb.numpadPlusKey.wasPressedThisFrame) level = Mathf.Min(level + 10f, 100f);
-        if (kb.minusKey.wasPressedThisFrame || kb.numpadMinusKey.wasPressedThisFrame) level = Mathf.Max(level - 10f, 10f);
+        if (kb.equalsKey.wasPressedThisFrame || kb.numpadPlusKey.wasPressedThisFrame) level = Mathf.Min(level + 1f, 9f);
+        if (kb.minusKey.wasPressedThisFrame || kb.numpadMinusKey.wasPressedThisFrame) level = Mathf.Max(level - 1f, 1f);
 
         float throttle = Axis(kb.wKey, kb.sKey);
         float steer = Axis(kb.dKey, kb.aKey);
         bool stop = kb.spaceKey.isPressed;
-        left = stop ? 0f : Mathf.Clamp((throttle + steer) * level, -100f, 100f);
-        right = stop ? 0f : Mathf.Clamp((throttle - steer) * level, -100f, 100f);
+        left = stop ? 0f : Mathf.Clamp((throttle + steer) * level, -9f, 9f);
+        right = stop ? 0f : Mathf.Clamp((throttle - steer) * level, -9f, 9f);
 
         // Clamped so a frame spike cannot make the loop chase an ever growing debt.
         accumulator = Mathf.Min(accumulator + Time.deltaTime, 4f * controlPeriod);
@@ -84,9 +84,9 @@ public class ManualController : MonoBehaviour
         GUI.skin.label.wordWrap = false;
 
         StringBuilder text = new StringBuilder();
-        text.Append("duty   L ").Append(left.ToString("F0"))
-            .Append("   R ").Append(right.ToString("F0")).Append('\n');
-        text.Append("level  ").Append(level.ToString("F0")).Append("\n\n");
+        text.Append("volts  L ").Append(left.ToString("F1"))
+            .Append("   R ").Append(right.ToString("F1")).Append('\n');
+        text.Append("level  ").Append(level.ToString("F1")).Append("\n\n");
         for (int i = 0; i < ObsNames.Length; i++)
             text.Append(ObsNames[i]).Append("   ").Append(obs[i].ToString("F1")).Append('\n');
         text.Append("\nWASD drive   -/+ level\nspace stop   R reset");

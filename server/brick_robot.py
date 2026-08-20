@@ -3,7 +3,12 @@
 Observation order and units are RobotController.Observe's, so a log written here lines
 up column for column with logs/sim/arena-*.csv.
 
-step waits between writing duty and reading sensors. In simulation unity advances its
+The action is armature voltage, not duty: duty follows from the battery voltage
+measured in the same step, so the policy's command means the same speed at any charge.
+measured_volts already includes the sag under load, which is the voltage the motor
+actually sees.
+
+step waits between writing the action and reading sensors. In simulation unity advances its
 own clock inside step; here the world advances in real time, so reading straight after
 writing would put a whole control period of actuation latency into the hardware log and
 nowhere else. That is why runner.run is called with period=None: the pacing lives here.
@@ -12,6 +17,7 @@ nowhere else. That is why runner.run is called with period=None: the pacing live
 import time
 
 from ev3dev2.motor import Motor, OUTPUT_A, OUTPUT_B
+from ev3dev2.power import PowerSupply
 from ev3dev2.sensor import INPUT_1, INPUT_2, INPUT_3
 from ev3dev2.sensor.lego import ColorSensor, UltrasonicSensor
 
@@ -24,6 +30,7 @@ class BrickRobot:
         self.right_color = ColorSensor(INPUT_2)
         self.left_motor = Motor(OUTPUT_A)
         self.right_motor = Motor(OUTPUT_B)
+        self.battery = PowerSupply()
         self.overruns = 0
 
     def reset(self):
@@ -38,8 +45,9 @@ class BrickRobot:
         return self._observe()
 
     def step(self, action):
-        self.left_motor.duty_cycle_sp = int(round(action[0]))
-        self.right_motor.duty_cycle_sp = int(round(action[1]))
+        volts = self.battery.measured_volts
+        self.left_motor.duty_cycle_sp = self._duty(action[0], volts)
+        self.right_motor.duty_cycle_sp = self._duty(action[1], volts)
 
         self.deadline += self.period
         lag = self.deadline - time.monotonic()
@@ -50,6 +58,10 @@ class BrickRobot:
             self.deadline = time.monotonic()
 
         return self._observe()
+
+    @staticmethod
+    def _duty(command, battery):
+        return int(round(max(-100.0, min(100.0, 100.0 * command / battery))))
 
     def stop(self):
         self.left_motor.stop(stop_action="coast")

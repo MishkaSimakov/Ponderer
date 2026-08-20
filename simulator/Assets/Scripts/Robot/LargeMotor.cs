@@ -28,7 +28,7 @@ public class LargeMotor : MonoBehaviour, IArenaResettable
 
     private Rigidbody body;
     private RobotController robotController;
-    private float duty; // D_i, [-1, 1]
+    private float command; // commanded armature voltage, V
     private float speed; // v_i, m/s at the contact patch, lagging cruise speed
 
     private float angle; // theta_i, rad
@@ -43,7 +43,7 @@ public class LargeMotor : MonoBehaviour, IArenaResettable
 
     public void OnArenaReset(ArenaContext ctx)
     {
-        duty = 0f;
+        command = 0f;
         speed = 0f;
         angle = 0f;
 
@@ -58,9 +58,9 @@ public class LargeMotor : MonoBehaviour, IArenaResettable
         reverseFrictionSpeed = rng.Range(ReverseFrictionSpeedRange);
     }
 
-    public void SetDuty(float value)
+    public void SetVolts(float value)
     {
-        duty = Mathf.Clamp(value, -100f, 100f) / 100f;
+        command = value;
     }
 
     public float GetDegrees()
@@ -70,7 +70,9 @@ public class LargeMotor : MonoBehaviour, IArenaResettable
 
     public void Tick(float dt)
     {
-        float voltage = robotController.Voltage * duty;
+        // The brick divides the command by the battery voltage it measures, so the
+        // command arrives here as is, except where that would ask for duty above 100%.
+        float voltage = Mathf.Clamp(command, -robotController.Voltage, robotController.Voltage);
         float speedPerVolt = voltage >= 0f ? forwardSpeedPerVolt : reverseSpeedPerVolt;
         float frictionSpeed = voltage >= 0f ? forwardFrictionSpeed : reverseFrictionSpeed;
 

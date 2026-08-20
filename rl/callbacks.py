@@ -13,11 +13,11 @@ formats only understand scalars, hence the exclude.
 import numpy as np
 from stable_baselines3.common.callbacks import BaseCallback
 
-from rl.vec_sim import DUTY
+from shared.action import VOLTS
 from shared.features import DIM, NAMES
 
 HISTOGRAM = ("stdout", "log", "json", "csv")
-ACTIONS = ("duty_left", "duty_right")
+ACTIONS = ("volts_left", "volts_right")
 
 
 class Stats(BaseCallback):
@@ -79,11 +79,11 @@ class Stats(BaseCallback):
                 record("reward/" + name, float(terms[:, i].mean()))
                 record("reward_hist/" + name, terms[:, i], exclude=HISTOGRAM)
 
-        # Duty as unity receives it, so saturation is readable against the +-100 clamp.
-        actions = np.concatenate(self.actions) * DUTY
+        # Volts as unity receives it, so saturation is readable against the +-VOLTS clamp.
+        actions = np.concatenate(self.actions) * VOLTS
         for i, name in enumerate(ACTIONS):
             record("action/" + name, actions[:, i], exclude=HISTOGRAM)
-        record("action/saturated_frac", float(np.mean(np.abs(actions) >= DUTY)))
+        record("action/saturated_frac", float(np.mean(np.abs(actions) >= VOLTS)))
 
         # What the network saw. These are the distributions the brick has to reproduce.
         features = np.concatenate(self.features)
