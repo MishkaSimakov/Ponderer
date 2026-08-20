@@ -19,6 +19,15 @@ public struct TrackSample
 // lateral.
 public class TrackController : MonoBehaviour, IArenaResettable
 {
+    // Rectangle in track coordinates: axis is the long side, half its extents.
+    struct Blotch
+    {
+        public Vector2 Center;
+        public Vector2 Axis;
+        public Vector2 Half;
+        public Color32 Color;
+    }
+
     // Printed area, meters. Centered on the pad, which may be larger.
     [SerializeField] Vector2 size = new Vector2(0.8f, 0.8f);
     [SerializeField] int resolution = 512;
@@ -27,11 +36,18 @@ public class TrackController : MonoBehaviour, IArenaResettable
 
     static readonly Vector2 LineWidthRange = new Vector2(0.024f, 0.026f);
     float lineWidth;
+
     // 1/m: the tightest turn the line is allowed to take.
     [SerializeField] float maxCurvature = 5f;
     [SerializeField] float margin = 0.05f;
     // Meters between the curvature control points the line interpolates through.
     [SerializeField] float curvatureLength = 0.25f;
+
+    // Colored patches painted over the line, as on the real pad.
+    const int MaxBlotches = 5;
+    static readonly Vector2 BlotchSizeRange = new Vector2(0.01f, 0.08f);
+    static readonly Vector2 BlotchSaturationRange = new Vector2(0.7f, 1f);
+    static readonly Vector2 BlotchValueRange = new Vector2(0.6f, 1f);
 
     const float Step = 0.01f;
     // Bounding the heading keeps the line a graph over the track x axis, so it
@@ -48,6 +64,8 @@ public class TrackController : MonoBehaviour, IArenaResettable
     byte[] coverage;
     Vector2[] points;
     int count;
+    Blotch[] blotches;
+    int blotchCount;
 
     public ResetPhase Phase { get { return ResetPhase.World; } }
 
@@ -77,6 +95,7 @@ public class TrackController : MonoBehaviour, IArenaResettable
         bendBand = 1f - 2f * room / halfWidth;
 
         points = new Vector2[Mathf.CeilToInt(size.x / (Mathf.Cos(MaxHeading) * Step)) + 2];
+        blotches = new Blotch[MaxBlotches];
         pixels = new Color32[resolution * resolution];
         coverage = new byte[resolution * resolution];
         texture = new Texture2D(resolution, resolution, TextureFormat.RGB24, false);
@@ -125,7 +144,9 @@ public class TrackController : MonoBehaviour, IArenaResettable
         ArenaRandom rng = ctx.PhysicsRng(this);
         lineWidth = rng.Range(LineWidthRange);
 
-        Generate(ctx.ScenarioRng(this));
+        ArenaRandom scenario = ctx.ScenarioRng(this);
+        Generate(scenario);
+        GenerateBlotches(scenario);
         Rasterize();
     }
 
@@ -171,6 +192,35 @@ public class TrackController : MonoBehaviour, IArenaResettable
         }
     }
 
+    // Placed anywhere along the line, offset within the line width and turned by an
+    // arbitrary angle. Nothing is drawn when scenario randomization is off.
+    void GenerateBlotches(ArenaRandom rng)
+    {
+        blotchCount = rng.Enabled ? rng.Int(MaxBlotches + 1) : 0;
+
+        for (int i = 0; i < blotchCount; i++)
+        {
+            float at = rng.Value * (count - 1);
+            int segment = Mathf.Min((int)at, count - 2);
+
+            Vector2 direction = (points[segment + 1] - points[segment]).normalized;
+            Vector2 normal = new Vector2(-direction.y, direction.x);
+            float angle = rng.Range(new Vector2(-Mathf.PI, Mathf.PI));
+
+            blotches[i] = new Blotch
+            {
+                Center = Vector2.Lerp(points[segment], points[segment + 1], at - segment)
+                         + normal * rng.Range(new Vector2(-0.5f, 0.5f) * lineWidth),
+                Axis = new Vector2(
+                    direction.x * Mathf.Cos(angle) - direction.y * Mathf.Sin(angle),
+                    direction.x * Mathf.Sin(angle) + direction.y * Mathf.Cos(angle)),
+                Half = 0.5f * new Vector2(rng.Range(BlotchSizeRange), rng.Range(BlotchSizeRange)),
+                Color = Color.HSVToRGB(
+                    rng.Value, rng.Range(BlotchSaturationRange), rng.Range(BlotchValueRange))
+            };
+        }
+    }
+
     float Curvature(ArenaRandom rng)
     {
         return rng.Range(new Vector2(-maxCurvature, maxCurvature));
@@ -186,6 +236,8 @@ public class TrackController : MonoBehaviour, IArenaResettable
         Color32 line = lineColor;
         for (int i = 0; i < pixels.Length; i++)
             pixels[i] = Color32.Lerp(background, line, coverage[i] / 255f);
+
+        for (int i = 0; i < blotchCount; i++) Splat(blotches[i]);
 
         texture.SetPixels32(pixels);
         texture.Apply(false);
@@ -215,6 +267,35 @@ public class TrackController : MonoBehaviour, IArenaResettable
                 int index = y * resolution + x;
                 byte written = (byte)Mathf.RoundToInt(255f * value);
                 if (written > coverage[index]) coverage[index] = written;
+            }
+    }
+
+    // One blotch straight over the composited line, same soft edge as the stroke.
+    void Splat(Blotch blotch)
+    {
+        Vector2 across = new Vector2(-blotch.Axis.y, blotch.Axis.x);
+        float reach = blotch.Half.magnitude + texel.x;
+
+        int x0 = Pixel(blotch.Center.x - reach, size.x, texel.x);
+        int x1 = Pixel(blotch.Center.x + reach, size.x, texel.x);
+        int y0 = Pixel(blotch.Center.y - reach, size.y, texel.y);
+        int y1 = Pixel(blotch.Center.y + reach, size.y, texel.y);
+
+        for (int y = y0; y <= y1; y++)
+            for (int x = x0; x <= x1; x++)
+            {
+                Vector2 d = new Vector2(
+                    (x + 0.5f) * texel.x - 0.5f * size.x - blotch.Center.x,
+                    (y + 0.5f) * texel.y - 0.5f * size.y - blotch.Center.y);
+
+                float u = Mathf.Abs(Vector2.Dot(d, blotch.Axis)) - blotch.Half.x;
+                float v = Mathf.Abs(Vector2.Dot(d, across)) - blotch.Half.y;
+                float distance = new Vector2(Mathf.Max(u, 0f), Mathf.Max(v, 0f)).magnitude
+                                 + Mathf.Min(Mathf.Max(u, v), 0f);
+
+                float value = Mathf.Clamp01((0.5f * texel.x - distance) / texel.x);
+                int index = y * resolution + x;
+                pixels[index] = Color32.Lerp(pixels[index], blotch.Color, value);
             }
     }
 

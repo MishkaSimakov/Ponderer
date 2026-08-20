@@ -16,8 +16,12 @@ from brick.brick_robot import BrickRobot
 from shared.policies.experiments.duty_steps import DutyStepsPolicy
 from shared.policies.net import latest
 
-POLICY = DutyStepsPolicy  # or latest, for the newest export in policy/
-NAME = "duty_steps"  # logs/brick/<NAME>-<utc>.csv
+# POLICY = DutyStepsPolicy  # or latest, for the newest export in policy/
+# NAME = "duty_steps"  # logs/brick/<NAME>-<utc>.csv
+
+POLICY = latest
+NAME = "net"  # logs/brick/<NAME>-<utc>.csv
+
 STEPS = None  # None: the policy's own schedule, or until ctrl-c if it has none
 FREQUENCY = 20.0
 

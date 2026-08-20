@@ -13,6 +13,8 @@ public class LargeMotor : MonoBehaviour, IArenaResettable
     float longitudinalStiffness = 100f; // k_x
     float lateralStiffness = 100f; // k_y
 
+    float forceNoise = 5f; // sigma, N of zero mean Gaussian noise on each force component
+
     static readonly Vector2 SpeedTauRange = new Vector2(0.05f, 0.12f);
     float speedTau; // tau, s to close 63% of the gap to cruise speed
 
@@ -26,6 +28,7 @@ public class LargeMotor : MonoBehaviour, IArenaResettable
     float reverseSpeedPerVolt; // alpha, (m/s)/V at U < 0
     float reverseFrictionSpeed; // beta, m/s at U < 0
 
+    private ArenaRandom rng;
     private Rigidbody body;
     private RobotController robotController;
     private float command; // commanded armature voltage, V
@@ -48,7 +51,7 @@ public class LargeMotor : MonoBehaviour, IArenaResettable
         angle = 0f;
 
         // Domain Randomization
-        ArenaRandom rng = ctx.PhysicsRng(this);
+        rng = ctx.PhysicsRng(this);
 
         speedTau = rng.Range(SpeedTauRange);
 
@@ -103,6 +106,11 @@ public class LargeMotor : MonoBehaviour, IArenaResettable
         force = Vector2.ClampMagnitude(force, Mathf.Min(friction, stable));
 
         angle += dt * angularVelocity;
+
+        force.x += rng.Normal(forceNoise);
+        force.y += rng.Normal(forceNoise);
+
+        Debug.Log(rng.Normal(forceNoise));
 
         body.AddForceAtPosition(force.x * transform.forward + force.y * transform.right, transform.position);
     }

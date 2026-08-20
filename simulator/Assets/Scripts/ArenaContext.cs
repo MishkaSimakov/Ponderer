@@ -13,6 +13,8 @@ public class ArenaRandom
         this.enabled = enabled;
     }
 
+    public bool Enabled { get { return enabled; } }
+
     public float Value { get { return (float)rng.NextDouble(); } }
 
     public int Int(int maxExclusive) { return rng.Next(maxExclusive); }
@@ -21,6 +23,15 @@ public class ArenaRandom
     public float Range(Vector2 range)
     {
         return enabled ? Mathf.Lerp(range.x, range.y, Value) : 0.5f * (range.x + range.y);
+    }
+
+    // Box-Muller. Returns zero when this randomization category is disabled.
+    public float Normal(float sigma)
+    {
+        if (!enabled) return 0f;
+        double u1 = 1.0 - rng.NextDouble();
+        double u2 = rng.NextDouble();
+        return sigma * (float)(Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2));
     }
 }
 
