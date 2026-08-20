@@ -1,6 +1,7 @@
 from collections import namedtuple
 
 from bridge.connection import Connection, PROTOCOL_VERSION
+from shared.runner import EpisodeEnded
 
 # obs is the observation to act on next; terminal_obs is the last observation of a
 # finished episode and is meaningful only where terminated or truncated is set.
@@ -86,17 +87,33 @@ class Simulation:
 
 
 class SimRobot:
-    """Single arena, matching the interface shared.runner expects."""
+    """Single arena, matching the interface shared.runner expects.
 
-    def __init__(self, simulation, seed=None):
+    One episode, never two: unity auto resets, and a run that walked into the next
+    episode would be a log of two runs glued together with the clock rewound. The
+    end of the episode is where a run of no fixed length stops.
+    """
+
+    def __init__(self, simulation, seed=None, randomize_scenario=False):
         if simulation.arenas != 1:
             raise ValueError("SimRobot needs a single arena simulation")
         self.sim = simulation
         self.seed = seed
+        self.randomize_scenario = randomize_scenario
 
     def reset(self):
         seeds = None if self.seed is None else [self.seed]
-        return self.sim.reset(seeds=seeds, randomize_physics=False).obs[0]
+        return self.sim.reset(seeds=seeds, randomize_scenario=self.randomize_scenario,
+                              randomize_physics=False).obs[0]
 
     def step(self, action):
-        return self.sim.step([action]).obs[0]
+        state = self.sim.step([action])
+        if state.terminated[0] or state.truncated[0]:
+            raise EpisodeEnded("episode %s at step %d: the arena has already reset"
+                               % ("terminated" if state.terminated[0] else "truncated",
+                                  state.step[0]))
+        return state.obs[0]
+
+    def stop(self):
+        """Same place in a run as BrickRobot.stop: let go of the hardware."""
+        self.sim.close()

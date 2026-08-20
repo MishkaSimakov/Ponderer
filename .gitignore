@@ -5,7 +5,7 @@
 
 logs
 analysis
-experiments
+/experiments
 docs
 policy
 cloud.sh
