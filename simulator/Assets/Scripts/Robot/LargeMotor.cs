@@ -13,7 +13,7 @@ public class LargeMotor : MonoBehaviour, IArenaResettable
     float longitudinalStiffness = 100f; // k_x
     float lateralStiffness = 100f; // k_y
 
-    float forceNoise = 5f; // sigma, N of zero mean Gaussian noise on each force component
+    float forceNoise = 0f; // sigma, N of zero mean Gaussian noise on each force component
 
     static readonly Vector2 SpeedTauRange = new Vector2(0.05f, 0.12f);
     float speedTau; // tau, s to close 63% of the gap to cruise speed
@@ -53,7 +53,8 @@ public class LargeMotor : MonoBehaviour, IArenaResettable
         // Domain Randomization
         rng = ctx.PhysicsRng(this);
 
-        speedTau = rng.Range(SpeedTauRange);
+//        speedTau = rng.Range(SpeedTauRange);
+        speedTau = 0.2f;
 
         forwardSpeedPerVolt = rng.Range(ForwardSpeedPerVoltRange);
         forwardFrictionSpeed = rng.Range(ForwardFrictionSpeedRange);
@@ -109,8 +110,6 @@ public class LargeMotor : MonoBehaviour, IArenaResettable
 
         force.x += rng.Normal(forceNoise);
         force.y += rng.Normal(forceNoise);
-
-        Debug.Log(rng.Normal(forceNoise));
 
         body.AddForceAtPosition(force.x * transform.forward + force.y * transform.right, transform.position);
     }

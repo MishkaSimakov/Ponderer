@@ -30,12 +30,14 @@ def main():
     parser.add_argument("--port", type=int, default=5005)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--randomize-scenario", action="store_true")
+    parser.add_argument("--randomize-physics", action="store_true")
     parser.add_argument("--speed", type=float, default=1.0,
                         help="wall clock pacing only, <1 slows the picture down")
     args = parser.parse_args()
 
     sim = Simulation(port=args.port, session_seed=args.seed)
-    robot = SimRobot(sim, seed=args.seed, randomize_scenario=args.randomize_scenario)
+    robot = SimRobot(sim, seed=args.seed, randomize_scenario=args.randomize_scenario,
+                     randomize_physics=args.randomize_physics)
     policy = resolve(args.policy)()
     name = args.name or args.policy.partition(":")[0].rpartition(".")[2]
 

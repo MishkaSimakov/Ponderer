@@ -94,17 +94,19 @@ class SimRobot:
     end of the episode is where a run of no fixed length stops.
     """
 
-    def __init__(self, simulation, seed=None, randomize_scenario=False):
+    def __init__(self, simulation, seed=None, randomize_scenario=False,
+                 randomize_physics=False):
         if simulation.arenas != 1:
             raise ValueError("SimRobot needs a single arena simulation")
         self.sim = simulation
         self.seed = seed
         self.randomize_scenario = randomize_scenario
+        self.randomize_physics = randomize_physics
 
     def reset(self):
         seeds = None if self.seed is None else [self.seed]
         return self.sim.reset(seeds=seeds, randomize_scenario=self.randomize_scenario,
-                              randomize_physics=False).obs[0]
+                              randomize_physics=self.randomize_physics).obs[0]
 
     def step(self, action):
         state = self.sim.step([action])
