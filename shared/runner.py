@@ -1,9 +1,11 @@
 """One run of one policy: the same code in simulation and on the brick.
 
-Order is read, decide, write, wait. The action is logged in the same row as the
-observation it was computed from; misaligning this reads as actuation latency that
-is not there. The row's time is the one inside the observation, not the host clock:
-only the first is comparable between brick and simulation.
+Order is read, decide, wait, write: the action lands at the end of the period it was
+computed in, which is the only place a brick that spends most of a period computing
+can put it. The action is logged in the same row as the observation it was computed
+from; misaligning this reads as actuation latency that is not there. The row's time is
+the one inside the observation, not the host clock: only the first is comparable
+between brick and simulation.
 
 The entrypoints are arena.py and brick/run.py. They differ in the robot they build
 and in nothing else.

@@ -53,8 +53,7 @@ public class LargeMotor : MonoBehaviour, IArenaResettable
         // Domain Randomization
         rng = ctx.PhysicsRng(this);
 
-//        speedTau = rng.Range(SpeedTauRange);
-        speedTau = 0.2f;
+        speedTau = rng.Range(SpeedTauRange);
 
         forwardSpeedPerVolt = rng.Range(ForwardSpeedPerVoltRange);
         forwardFrictionSpeed = rng.Range(ForwardFrictionSpeedRange);

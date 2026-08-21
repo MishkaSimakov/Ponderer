@@ -8,10 +8,13 @@ measured in the same step, so the policy's command means the same speed at any c
 measured_volts already includes the sag under load, which is the voltage the motor
 actually sees.
 
-step waits between writing the action and reading sensors. In simulation unity advances its
-own clock inside step; here the world advances in real time, so reading straight after
-writing would put a whole control period of actuation latency into the hardware log and
-nowhere else. That is why runner.run is called with period=None: the pacing lives here.
+step waits before writing the action, not after. The brick spends most of a period
+computing, so the action can only land at the end of the one it was computed in; sleeping
+to that instant instead of writing as soon as the number exists makes it a fixed point of
+the period rather than one that moves with however long inference took. Bridge.StepAll
+applies the action at the same point of its step, and Bridge.controlPeriod is the same
+constant as run.py's FREQUENCY. The pacing lives here, which is why runner.run is called
+with period=None.
 """
 
 import time
@@ -45,9 +48,12 @@ class BrickRobot:
         return self._observe()
 
     def step(self, action):
+        # Before the sleep, so that only the two duty writes stand between the deadline
+        # and the action. The sag it carries is the previous action's either way: that is
+        # what the motors are still doing until the write below.
         volts = self.battery.measured_volts
-        self.left_motor.duty_cycle_sp = self._duty(action[0], volts)
-        self.right_motor.duty_cycle_sp = self._duty(action[1], volts)
+        left = self._duty(action[0], volts)
+        right = self._duty(action[1], volts)
 
         self.deadline += self.period
         lag = self.deadline - time.monotonic()
@@ -57,6 +63,8 @@ class BrickRobot:
             self.overruns += 1
             self.deadline = time.monotonic()
 
+        self.left_motor.duty_cycle_sp = left
+        self.right_motor.duty_cycle_sp = right
         return self._observe()
 
     @staticmethod

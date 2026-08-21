@@ -11,17 +11,15 @@ public class Bridge : MonoBehaviour
 
     [SerializeField] Arena arenaPrefab;
     [SerializeField] float arenaSpacing = 20f;
-    // A policy step is as long as it is on the brick: never shorter than the 20 Hz
-    // deadline, plus an exponential overrun. Fitted on logs/brick/drive-20260801-170629.csv,
-    // whose mean step is controlPeriodMin + controlPeriodScale.
-    [SerializeField] float controlPeriodMin = 0.0487f;
-    [SerializeField] float controlPeriodScale = 0.00455f;
+    // One policy step, the same constant as brick/run.py's FREQUENCY. The brick sleeps
+    // to this deadline instead of running as fast as it can, so the step length is a
+    // number both sides are set to rather than a distribution fitted to a brick log.
+    [SerializeField] float controlPeriod = 0.0667f;
     [SerializeField] float physicsDt = 0.005f;
     [SerializeField] int editorPort = 5005;
     [SerializeField] int editorArenas = 1;
 
     Arena[] arenas;
-    System.Random stepRng;
     TcpListener listener;
     TcpClient client;
     NetworkStream stream;
@@ -85,14 +83,11 @@ public class Bridge : MonoBehaviour
                 // Python owns the seed root; arenas only derive from it when they
                 // auto reset, which happens without python in the loop.
                 for (int i = 0; i < arenas.Length; i++) arenas[i].Initialize(i, request.session_seed);
-                // Step length is one draw for the whole process: Physics.Simulate advances
-                // every arena at once, so they cannot be given different step lengths.
-                stepRng = new System.Random(request.session_seed & 0x7fffffff);
                 return JsonUtility.ToJson(new HandshakeResponse
                 {
                     version = Version,
                     arenas = arenas.Length,
-                    dt = controlPeriodMin + controlPeriodScale,
+                    dt = controlPeriod,
                     obs_dim = RobotController.ObsDim,
                     action_dim = RobotController.ActionDim,
                     reward_terms = arenas[0].TermNames
@@ -127,14 +122,10 @@ public class Bridge : MonoBehaviour
         if (actions == null || actions.Length != expected)
             throw new Exception("expected " + expected + " action values");
 
-        for (int i = 0; i < arenas.Length; i++)
-            arenas[i].ApplyAction(actions[i * 2], actions[i * 2 + 1]);
-
-        float dt = SampleControlPeriod();
         // Equal substeps near physicsDt rather than whole ones plus a remainder, which
         // would leave a last step short enough to be degenerate.
-        int substeps = Mathf.Max(1, Mathf.RoundToInt(dt / physicsDt));
-        float substep = dt / substeps;
+        int substeps = Mathf.Max(1, Mathf.RoundToInt(controlPeriod / physicsDt));
+        float substep = controlPeriod / substeps;
 
         for (int s = 0; s < substeps; s++)
         {
@@ -142,14 +133,13 @@ public class Bridge : MonoBehaviour
             Physics.Simulate(substep);
         }
 
-        for (int i = 0; i < arenas.Length; i++) arenas[i].AdvanceStep();
-    }
+        // After the substeps, not before them: the world runs the step on the action of
+        // the previous one, and this one lands where the brick writes it, at the end of
+        // the period it was computed in and just before the observation below is read.
+        for (int i = 0; i < arenas.Length; i++)
+            arenas[i].ApplyAction(actions[i * 2], actions[i * 2 + 1]);
 
-    // Shifted exponential. Always on: step length is what the brick's loop does, not a
-    // randomization to switch off. Reproducibility comes from stepRng's seed.
-    float SampleControlPeriod()
-    {
-        return controlPeriodMin - controlPeriodScale * Mathf.Log(1f - (float)stepRng.NextDouble());
+        for (int i = 0; i < arenas.Length; i++) arenas[i].AdvanceStep();
     }
 
     StateResponse Gather()
