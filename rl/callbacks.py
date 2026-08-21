@@ -10,6 +10,8 @@ SB3's tensorboard writer turns any recorded array into add_histogram; the other 
 formats only understand scalars, hence the exclude.
 """
 
+import time
+
 import numpy as np
 from stable_baselines3.common.callbacks import BaseCallback
 
@@ -36,6 +38,8 @@ class Stats(BaseCallback):
         self.names = self.training_env.unwrapped.reward_terms
         # An episode spans rollouts, so the accumulator outlives them.
         self.pending = np.zeros((self.training_env.num_envs, len(self.names)), np.float32)
+        self.clock = time.perf_counter()
+        self.timesteps = self.num_timesteps
 
     def _on_step(self):
         self.rewards.append(np.asarray(self.locals["rewards"], np.float32))
@@ -60,6 +64,13 @@ class Stats(BaseCallback):
 
     def _on_rollout_end(self):
         record = self.logger.record
+
+        # SB3's time/fps is the average since the run started, so a one time change in
+        # throughput decays into it instead of showing up where it happened.
+        now = time.perf_counter()
+        record("time/rollout_fps", (self.num_timesteps - self.timesteps) / (now - self.clock))
+        self.clock = now
+        self.timesteps = self.num_timesteps
 
         if self.returns:
             record("rollout/ep_rew_hist", np.array(self.returns, np.float32), exclude=HISTOGRAM)
