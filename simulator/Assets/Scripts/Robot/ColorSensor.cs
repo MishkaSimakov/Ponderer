@@ -7,7 +7,7 @@ public class ColorSensor : MonoBehaviour, IArenaResettable
     [SerializeField] LayerMask testPadMask;
     [SerializeField] bool drawRays;
 
-    int rays = 100;
+    int rays = 25;
 
     // Full apex angle of the cone, degrees.
     static readonly Vector2 ConeAngleRange = new Vector2(58f, 62f);
