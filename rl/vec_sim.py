@@ -8,7 +8,14 @@ is what separating terminated from truncated is for.
 
 One VecEnv spans every unity process: the arenas of instance 0 come first, then
 those of instance 1, and so on.
+
+A step is timed in three phases so a slow run can be blamed on the right side of the
+socket: send is python writing the actions, wait is the round trip, and decode is the
+python that turns the answer into observations. Every process is sent to before any is
+read from, so wait is what the slowest instance needed, not the sum.
 """
+
+import time
 
 import numpy as np
 from gymnasium import spaces
@@ -18,6 +25,8 @@ from bridge.launcher import Unity
 from bridge.sim_robot import Simulation, Step
 from shared.action import VOLTS
 from shared.features import DIM, Features
+
+PHASES = ("send", "wait", "decode")
 
 
 def make(env=None, num_envs=1, arenas=1, base_port=5005, seed=0, graphics=False,
@@ -52,6 +61,8 @@ class SimVecEnv(VecEnv):
         self.features = None
         # Every instance runs the same build, so the term names are the same too.
         self.reward_terms = self.sims[0].reward_terms
+        # Seconds spent in each phase of a step, summed until take_timers reads them.
+        self.timers = dict.fromkeys(PHASES, 0.0)
 
         super().__init__(
             sum(sim.arenas for sim in self.sims),
@@ -68,15 +79,21 @@ class SimVecEnv(VecEnv):
         return np.array([f.first(o) for f, o in zip(self.features, obs)], np.float32)
 
     def step_async(self, actions):
+        clock = time.perf_counter()
         # Actions live in [-1, 1] so the gaussian policy is symmetric; unity takes volts.
         actions = actions * VOLTS
         start = 0
         for sim in self.sims:
             sim.step_async(actions[start:start + sim.arenas])
             start += sim.arenas
+        self.timers["send"] += time.perf_counter() - clock
 
     def step_wait(self):
+        clock = time.perf_counter()
         states = [sim.step_wait() for sim in self.sims]
+        answered = time.perf_counter()
+        self.timers["wait"] += answered - clock
+
         state = Step(*[[v for s in states for v in getattr(s, field)]
                        for field in Step._fields])
 
@@ -102,7 +119,14 @@ class SimVecEnv(VecEnv):
             self.features[i] = Features()
             obs[i] = self.features[i].first(state.obs[i])
 
+        self.timers["decode"] += time.perf_counter() - answered
         return obs, np.array(state.reward, np.float32), dones, infos
+
+    def take_timers(self):
+        """Seconds per phase since the last call, and reset. Phases are PHASES."""
+        taken = dict(self.timers)
+        self.timers.update(dict.fromkeys(PHASES, 0.0))
+        return taken
 
     def close(self):
         # quit first, kill second: a player that obeys the command exits on its own.

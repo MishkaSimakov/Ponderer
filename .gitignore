@@ -8,7 +8,8 @@ analysis
 /experiments
 docs
 policy
-cloud.sh
+cloud_train.sh
+cloud_fetch.sh
 
 .claude
 CLAUDE.md

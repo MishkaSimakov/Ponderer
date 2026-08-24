@@ -8,6 +8,14 @@ actions and the features get histograms too.
 
 SB3's tensorboard writer turns any recorded array into add_histogram; the other output
 formats only understand scalars, hence the exclude.
+
+Next to them, where an iteration's wall clock went. Nothing calls back from inside
+train(), so update and log are measured across the gap between two rollouts and land
+one iteration behind the collect they are logged with. That lag is what makes the
+split exact rather than approximate:
+
+    time/iteration_s = time/update_s + time/stats_log_s + time/collect_s
+    time/collect_s   = time/env_{send,wait,decode}_s + time/stats_step_s + time/policy_s
 """
 
 import time
@@ -15,6 +23,7 @@ import time
 import numpy as np
 from stable_baselines3.common.callbacks import BaseCallback
 
+from rl.vec_sim import PHASES
 from shared.action import VOLTS
 from shared.features import DIM, NAMES
 
@@ -35,13 +44,29 @@ class Stats(BaseCallback):
         self.features = []
 
     def _on_training_start(self):
-        self.names = self.training_env.unwrapped.reward_terms
+        self.env = self.training_env.unwrapped
+        self.names = self.env.reward_terms
         # An episode spans rollouts, so the accumulator outlives them.
         self.pending = np.zeros((self.training_env.num_envs, len(self.names)), np.float32)
         self.clock = time.perf_counter()
         self.timesteps = self.num_timesteps
+        # No rollout has ended yet, so there is no gap to attribute to an update.
+        self.gap = None
+        self.update = 0.0
+        self.logging = 0.0
+        self.stepping = 0.0
+
+    def _on_rollout_start(self):
+        now = time.perf_counter()
+        # The gap holds the logger dump and train(); the tail of the previous
+        # _on_rollout_end is already in self.logging.
+        if self.gap is not None:
+            self.update = now - self.gap
+        self.collect = now
+        self.stepping = 0.0
 
     def _on_step(self):
+        clock = time.perf_counter()
         self.rewards.append(np.asarray(self.locals["rewards"], np.float32))
         self.pending += np.asarray([info["reward_terms"] for info in self.locals["infos"]],
                                    np.float32)
@@ -60,6 +85,7 @@ class Stats(BaseCallback):
             self.terms.append(self.pending[i].copy())
             self.pending[i] = 0.0
 
+        self.stepping += time.perf_counter() - clock
         return True
 
     def _on_rollout_end(self):
@@ -68,9 +94,23 @@ class Stats(BaseCallback):
         # SB3's time/fps is the average since the run started, so a one time change in
         # throughput decays into it instead of showing up where it happened.
         now = time.perf_counter()
+        record("time/iteration_s", now - self.clock)
         record("time/rollout_fps", (self.num_timesteps - self.timesteps) / (now - self.clock))
         self.clock = now
         self.timesteps = self.num_timesteps
+
+        collect = now - self.collect
+        phases = self.env.take_timers()
+        for phase in PHASES:
+            record("time/env_" + phase + "_s", phases[phase])
+        record("time/stats_step_s", self.stepping)
+        # Everything collect did outside the socket and outside this callback: the
+        # policy forward pass and the rollout buffer.
+        record("time/policy_s", collect - sum(phases.values()) - self.stepping)
+        record("time/collect_s", collect)
+        # One iteration late, see the module docstring.
+        record("time/update_s", self.update)
+        record("time/stats_log_s", self.logging)
 
         if self.returns:
             record("rollout/ep_rew_hist", np.array(self.returns, np.float32), exclude=HISTOGRAM)
@@ -108,3 +148,6 @@ class Stats(BaseCallback):
         for collected in (self.returns, self.lengths, self.terminated,
                           self.rewards, self.terms, self.actions, self.features):
             collected.clear()
+
+        self.gap = time.perf_counter()
+        self.logging = self.gap - now
