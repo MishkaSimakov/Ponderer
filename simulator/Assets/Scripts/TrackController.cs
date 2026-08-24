@@ -1,4 +1,5 @@
 using System;
+using Unity.Collections;
 using UnityEngine;
 
 public struct TrackSample
@@ -60,8 +61,11 @@ public class TrackController : MonoBehaviour, IArenaResettable
     float bendBand;
 
     Texture2D texture;
-    Color32[] pixels;
     byte[] coverage;
+    // Per row, the x span written by the last rasterization: the only pixels that
+    // need clearing and repainting. spanMin > spanMax marks an untouched row.
+    int[] spanMin;
+    int[] spanMax;
     Vector2[] points;
     int count;
     Blotch[] blotches;
@@ -96,10 +100,20 @@ public class TrackController : MonoBehaviour, IArenaResettable
 
         points = new Vector2[Mathf.CeilToInt(size.x / (Mathf.Cos(MaxHeading) * Step)) + 2];
         blotches = new Blotch[MaxBlotches];
-        pixels = new Color32[resolution * resolution];
         coverage = new byte[resolution * resolution];
-        texture = new Texture2D(resolution, resolution, TextureFormat.RGB24, false);
+        spanMin = new int[resolution];
+        spanMax = new int[resolution];
+        texture = new Texture2D(resolution, resolution, TextureFormat.RGBA32, false);
         texture.wrapMode = TextureWrapMode.Clamp;
+
+        NativeArray<Color32> pixels = texture.GetRawTextureData<Color32>();
+        Color32 background = backgroundColor;
+        for (int i = 0; i < pixels.Length; i++) pixels[i] = background;
+        for (int y = 0; y < resolution; y++)
+        {
+            spanMin[y] = resolution;
+            spanMax[y] = -1;
+        }
 
         // Instancing the material: every arena draws its own track. The texture
         // covers only the printed area, the rest of the pad clamps to its border.
@@ -228,19 +242,55 @@ public class TrackController : MonoBehaviour, IArenaResettable
 
     void Rasterize()
     {
-        Array.Clear(coverage, 0, coverage.Length);
-        for (int i = 1; i < count; i++) Stroke(points[i - 1], points[i]);
+        // The texture's own CPU memory. RGBA32 is Color32 byte for byte, so the
+        // rasterizer writes what is uploaded, with no intermediate buffer. The
+        // view is good for this call only.
+        NativeArray<Color32> pixels = texture.GetRawTextureData<Color32>();
 
-        // RGB24: the texture has no alpha channel at all, so it is always opaque.
+        Restore(pixels);
+        for (int i = 1; i < count; i++) Stroke(points[i - 1], points[i]);
+        Paint(pixels);
+        for (int i = 0; i < blotchCount; i++) Splat(pixels, blotches[i]);
+
+        texture.Apply(false);
+    }
+
+    // Whatever the last track wrote goes back to background. The band the line
+    // and the blotches cover is a small part of the image; the rest never changed.
+    void Restore(NativeArray<Color32> pixels)
+    {
+        Color32 background = backgroundColor;
+        for (int y = 0; y < resolution; y++)
+        {
+            int row = y * resolution;
+            for (int x = spanMin[y]; x <= spanMax[y]; x++)
+            {
+                pixels[row + x] = background;
+                coverage[row + x] = 0;
+            }
+            spanMin[y] = resolution;
+            spanMax[y] = -1;
+        }
+    }
+
+    // Composites the strokes, before the blotches widen the spans. Alpha rides
+    // along from the colors, all of which are opaque.
+    void Paint(NativeArray<Color32> pixels)
+    {
         Color32 background = backgroundColor;
         Color32 line = lineColor;
-        for (int i = 0; i < pixels.Length; i++)
-            pixels[i] = Color32.Lerp(background, line, coverage[i] / 255f);
+        for (int y = 0; y < resolution; y++)
+        {
+            int row = y * resolution;
+            for (int x = spanMin[y]; x <= spanMax[y]; x++)
+                pixels[row + x] = Color32.Lerp(background, line, coverage[row + x] / 255f);
+        }
+    }
 
-        for (int i = 0; i < blotchCount; i++) Splat(blotches[i]);
-
-        texture.SetPixels32(pixels);
-        texture.Apply(false);
+    void Mark(int y, int x0, int x1)
+    {
+        if (x0 < spanMin[y]) spanMin[y] = x0;
+        if (x1 > spanMax[y]) spanMax[y] = x1;
     }
 
     // One segment of the centerline, antialiased over a texel so the sensor sees a
@@ -256,6 +306,8 @@ public class TrackController : MonoBehaviour, IArenaResettable
         int y1 = Pixel(Mathf.Max(a.y, b.y) + reach, size.y, texel.y);
 
         for (int y = y0; y <= y1; y++)
+        {
+            Mark(y, x0, x1);
             for (int x = x0; x <= x1; x++)
             {
                 Vector2 c = new Vector2(
@@ -268,10 +320,11 @@ public class TrackController : MonoBehaviour, IArenaResettable
                 byte written = (byte)Mathf.RoundToInt(255f * value);
                 if (written > coverage[index]) coverage[index] = written;
             }
+        }
     }
 
     // One blotch straight over the composited line, same soft edge as the stroke.
-    void Splat(Blotch blotch)
+    void Splat(NativeArray<Color32> pixels, Blotch blotch)
     {
         Vector2 across = new Vector2(-blotch.Axis.y, blotch.Axis.x);
         float reach = blotch.Half.magnitude + texel.x;
@@ -282,6 +335,8 @@ public class TrackController : MonoBehaviour, IArenaResettable
         int y1 = Pixel(blotch.Center.y + reach, size.y, texel.y);
 
         for (int y = y0; y <= y1; y++)
+        {
+            Mark(y, x0, x1);
             for (int x = x0; x <= x1; x++)
             {
                 Vector2 d = new Vector2(
@@ -297,6 +352,7 @@ public class TrackController : MonoBehaviour, IArenaResettable
                 int index = y * resolution + x;
                 pixels[index] = Color32.Lerp(pixels[index], blotch.Color, value);
             }
+        }
     }
 
     int Pixel(float meters, float span, float texelSize)
