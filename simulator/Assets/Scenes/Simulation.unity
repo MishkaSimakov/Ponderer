@@ -413,9 +413,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Bridge
   arenaPrefab: {fileID: 2696578382889603542, guid: e7c4648efe2ed4d05bcee061ccba18c5, type: 3}
-  arenaSpacing: 10
-  controlPeriodMin: 0.0487
-  controlPeriodScale: 0.00455
+  arenaSpacing: 20
+  controlPeriod: 0.0667
   physicsDt: 0.005
   editorPort: 5005
   editorArenas: 1
