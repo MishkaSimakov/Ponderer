@@ -35,7 +35,7 @@ public class TrackController : MonoBehaviour, IArenaResettable
     [SerializeField] Color lineColor = Color.black;
     [SerializeField] Color backgroundColor = Color.white;
 
-    static readonly Vector2 LineWidthRange = new Vector2(0.024f, 0.026f);
+    static readonly Vector2 LineWidthRange = new Vector2(0.025f, 0.025f);
     float lineWidth;
 
     // 1/m: the tightest turn the line is allowed to take.
