@@ -21,7 +21,6 @@ SCENE = read("simulator", "Assets", "Scenes", "Simulation.unity")
 # c# expression in RobotController.Observe -> column it writes.
 UNITY_OBSERVATION = {
     "ElapsedSeconds": "t",
-    "ultrasonic.DistanceCm": "distance",
     "leftColor.Reflected": "left_color",
     "rightColor.Reflected": "right_color",
     "leftMotor.GetDegrees()": "left_position",
@@ -31,7 +30,6 @@ UNITY_OBSERVATION = {
 # python expression in BrickRobot._observe -> column it returns.
 BRICK_OBSERVATION = {
     "time.monotonic() - self.start": "t",
-    "self.distance.distance_centimeters_continuous": "distance",
     "self.left_color.reflected_light_intensity": "left_color",
     "self.right_color.reflected_light_intensity": "right_color",
     "self.left_motor.position": "left_position",

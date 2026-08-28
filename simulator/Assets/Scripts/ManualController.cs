@@ -8,7 +8,7 @@ using UnityEngine.InputSystem.Controls;
 // Episodes never truncate here, but conditions still end them.
 public class ManualController : MonoBehaviour
 {
-    static readonly string[] ObsNames = { "t", "distance", "left_color", "right_color", "left_position", "right_position" };
+    static readonly string[] ObsNames = { "t", "left_color", "right_color", "left_position", "right_position" };
 
     [SerializeField] Arena arenaPrefab;
     [SerializeField] float controlPeriod = 0.05f;

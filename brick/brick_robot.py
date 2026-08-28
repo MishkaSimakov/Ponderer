@@ -21,14 +21,13 @@ import time
 
 from ev3dev2.motor import Motor, OUTPUT_A, OUTPUT_B
 from ev3dev2.power import PowerSupply
-from ev3dev2.sensor import INPUT_1, INPUT_2, INPUT_3
-from ev3dev2.sensor.lego import ColorSensor, UltrasonicSensor
+from ev3dev2.sensor import INPUT_2, INPUT_3
+from ev3dev2.sensor.lego import ColorSensor
 
 
 class BrickRobot:
     def __init__(self, period):
         self.period = period
-        self.distance = UltrasonicSensor(INPUT_1)
         self.left_color = ColorSensor(INPUT_3)
         self.right_color = ColorSensor(INPUT_2)
         self.left_motor = Motor(OUTPUT_A)
@@ -77,7 +76,6 @@ class BrickRobot:
 
     def _observe(self):
         return [time.monotonic() - self.start,
-                self.distance.distance_centimeters_continuous,
                 self.left_color.reflected_light_intensity,
                 self.right_color.reflected_light_intensity,
                 self.left_motor.position,
