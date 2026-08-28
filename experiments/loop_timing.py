@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 """How long each part of one control step takes on the brick.
 
-The parts are shared.runner's, in the order they would run if the action were applied
-at a fixed offset after the reading: observe, act, log, then the two halves of the
-write. Their sum is what the period has to cover, and the offset has to clear
-observe + act + log.
+The phases are the real loop's, in the real loop's order. shared.runner calls act and
+log, then brick.BrickRobot.step reads the battery and converts both duties, sleeps to
+the deadline, writes the two duty cycles and observes. So everything except the write
+and the observe happens before the deadline, and body is the work one period covers.
+
+act is split into the two halves NetPolicy.act runs: building the features from the
+observation, and the forward pass. The second is the inference number.
 
 The clock is measured too, because every number here costs two of its calls.
 
@@ -21,15 +24,13 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import numpy as np
+
 from brick.brick_robot import BrickRobot
 from shared.csv_logger import CsvLogger
 from shared.logs import run_prefix
+from shared.policies.net import NetPolicy, latest
 from shared.runner import LOG_COLUMNS
-from shared.policies.net import latest
-from shared.policies.constant import ConstantPolicy
-
-# POLICY = ConstantPolicy
-# NAME = "loop_timing_constant"
 
 POLICY = latest
 NAME = "loop_timing"  # logs/brick/<NAME>-<utc>.csv
@@ -38,10 +39,12 @@ STEPS = 200
 FREQUENCY = 20.0
 CLOCK_CALLS = 10000
 
-PHASES = ["observe", "act", "log", "volts", "duty", "body"]
+PHASES = ["features", "net", "log", "volts", "duty", "write", "observe", "body"]
 
 period = 1.0 / FREQUENCY
 policy = POLICY()
+if not isinstance(policy, NetPolicy):
+    raise TypeError("the features/net split needs a NetPolicy, got %s" % type(policy))
 robot = BrickRobot(period)
 
 start = time.monotonic()
@@ -58,24 +61,25 @@ timings = []
 overruns = 0
 
 obs = robot.reset()
+started = False
 deadline = time.monotonic()
 
 try:
     for _ in range(STEPS):
         t0 = time.monotonic()
-        obs = robot._observe()
+        raw = policy.features.update(obs) if started else policy.features.first(obs)
+        x = np.asarray(raw, np.float32)
+        started = True
         t1 = time.monotonic()
-        action = policy.act(obs)
+        action = policy.act_features(x)
         t2 = time.monotonic()
         rows.log(action[0], action[1], *obs)
         t3 = time.monotonic()
         volts = robot.battery.measured_volts
         t4 = time.monotonic()
-        robot.left_motor.duty_cycle_sp = robot._duty(action[0], volts)
-        robot.right_motor.duty_cycle_sp = robot._duty(action[1], volts)
+        left = robot._duty(action[0], volts)
+        right = robot._duty(action[1], volts)
         t5 = time.monotonic()
-
-        timings.append([t1 - t0, t2 - t1, t3 - t2, t4 - t3, t5 - t4, t5 - t0])
 
         deadline += period
         lag = deadline - time.monotonic()
@@ -84,6 +88,16 @@ try:
         else:
             overruns += 1
             deadline = time.monotonic()
+
+        t6 = time.monotonic()
+        robot.left_motor.duty_cycle_sp = left
+        robot.right_motor.duty_cycle_sp = right
+        t7 = time.monotonic()
+        obs = robot._observe()
+        t8 = time.monotonic()
+
+        timings.append([t1 - t0, t2 - t1, t3 - t2, t4 - t3, t5 - t4, t7 - t6, t8 - t7,
+                        (t5 - t0) + (t8 - t6)])
 except KeyboardInterrupt:
     print("interrupted")
 finally:
