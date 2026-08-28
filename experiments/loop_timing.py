@@ -15,7 +15,7 @@ One row per step in logs/brick/<NAME>-<utc>.csv, written after the loop so that
 writing it does not land inside a step. The row the loop logs is a real run's row,
 so its cost is a real run's cost.
 
-    ./experiments/loop_timing.py
+    ./experiments/loop_timing.py [frequency] [steps]
 """
 
 import os
@@ -40,6 +40,10 @@ FREQUENCY = 20.0
 CLOCK_CALLS = 10000
 
 PHASES = ["features", "net", "log", "volts", "duty", "write", "observe", "body"]
+
+# Sweeping the rate is the point of the script, so both come off the command line.
+FREQUENCY = float(sys.argv[1]) if len(sys.argv) > 1 else FREQUENCY
+STEPS = int(sys.argv[2]) if len(sys.argv) > 2 else STEPS
 
 period = 1.0 / FREQUENCY
 policy = POLICY()
