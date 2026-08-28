@@ -38,7 +38,8 @@ BRICK_OBSERVATION = {
     "self.right_motor.position": "right_position",
 }
 
-# The brick runs python 3.9 with numpy and ev3dev2, nothing else.
+# The brick runs python 3.9 with numpy and ev3dev2, nothing else. sync.sh copies
+# experiments/ there too, so those scripts are held to the same rule.
 BRICK_PYTHON = (3, 9)
 HOST_ONLY = {"torch", "stable_baselines3", "sb3_contrib", "gymnasium", "tensorboard",
              "rl", "bridge"}
@@ -127,14 +128,14 @@ def test_scene_has_no_fields_the_bridge_script_dropped():
     assert scene_fields(SCENE, "Bridge") <= serialized_fields(BRIDGE)
 
 
-@pytest.mark.parametrize("path", sorted(sources("shared", "brick")))
+@pytest.mark.parametrize("path", sorted(sources("shared", "brick", "experiments")))
 def test_brick_sources_parse_on_python_39(path):
     """feature_version only checks syntax; a 3.10 stdlib call still slips through."""
     with open(path) as f:
         ast.parse(f.read(), path, feature_version=BRICK_PYTHON)
 
 
-@pytest.mark.parametrize("path", sorted(sources("shared", "brick")))
+@pytest.mark.parametrize("path", sorted(sources("shared", "brick", "experiments")))
 def test_brick_sources_import_nothing_the_brick_lacks(path):
     with open(path) as f:
         tree = ast.parse(f.read(), path)
