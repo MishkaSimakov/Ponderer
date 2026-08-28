@@ -63,7 +63,7 @@ def main():
     if os.path.exists(run):
         raise SystemExit("run %s already exists" % run)
 
-    # kill sends SIGTERM, and only an exception unwinds to the shutdown below.
+    # kill sends SIGTERM; the handler raises so the stack unwinds to the shutdown below.
     signal.signal(signal.SIGTERM, lambda *_: sys.exit("terminated"))
 
     env = make(
@@ -110,6 +110,9 @@ def main():
             print("interrupted")
         except OSError as error:
             print("simulation stopped: %s" % error)
+        except SystemExit as reason:
+            # SIGTERM. SystemExit is a BaseException, so the handlers above miss it.
+            print(reason)
 
         model.save(os.path.join(run, "model"))
         print("exported %s" % export(model, args.arch, name))

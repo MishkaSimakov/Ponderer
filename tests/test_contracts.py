@@ -38,8 +38,9 @@ BRICK_OBSERVATION = {
     "self.right_motor.position": "right_position",
 }
 
-# The brick runs python 3.9 with numpy and ev3dev2, nothing else.
-BRICK_PYTHON = (3, 9)
+# ev3dev ships python 3.5.3 and numpy 1.12; there is no other interpreter on the
+# brick. sync.sh copies experiments/ there too, so those scripts obey the same rule.
+BRICK_PYTHON = (3, 5)
 HOST_ONLY = {"torch", "stable_baselines3", "sb3_contrib", "gymnasium", "tensorboard",
              "rl", "bridge"}
 
@@ -127,14 +128,14 @@ def test_scene_has_no_fields_the_bridge_script_dropped():
     assert scene_fields(SCENE, "Bridge") <= serialized_fields(BRIDGE)
 
 
-@pytest.mark.parametrize("path", sorted(sources("shared", "brick")))
-def test_brick_sources_parse_on_python_39(path):
-    """feature_version only checks syntax; a 3.10 stdlib call still slips through."""
+@pytest.mark.parametrize("path", sorted(sources("shared", "brick", "experiments")))
+def test_brick_sources_parse_on_the_brick_python(path):
+    """feature_version only checks syntax; a newer stdlib call still slips through."""
     with open(path) as f:
         ast.parse(f.read(), path, feature_version=BRICK_PYTHON)
 
 
-@pytest.mark.parametrize("path", sorted(sources("shared", "brick")))
+@pytest.mark.parametrize("path", sorted(sources("shared", "brick", "experiments")))
 def test_brick_sources_import_nothing_the_brick_lacks(path):
     with open(path) as f:
         tree = ast.parse(f.read(), path)
@@ -147,3 +148,11 @@ def test_brick_sources_import_nothing_the_brick_lacks(path):
             imported.add(node.module.split(".")[0])
 
     assert not imported & HOST_ONLY
+
+
+def test_the_python_check_is_set_to_the_version_the_brick_runs():
+    """Set too high, the check above accepts syntax the brick would reject. Variable
+    annotations are 3.6, so this pins it to the 3.5 ev3dev ships. It is a floor and
+    not a guarantee: feature_version does not gate f-strings, which are 3.6 too."""
+    with pytest.raises(SyntaxError):
+        ast.parse("x: int = 1", feature_version=BRICK_PYTHON)

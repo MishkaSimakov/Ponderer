@@ -3,8 +3,12 @@
 No torch and no pickle: one npz of weights written by rl/export.py, read here. The
 action is the clipped mean, because a deployed policy does not sample.
 
-Every matrix multiply goes through linear(). Quantization replaces that one function
-with int8 weights and int32 accumulation; nothing else in this file changes.
+A step is a few thousand multiply-accumulates, and one numpy call costs about 240 us
+on the brick, so the step is priced in calls and not in arithmetic. The mlp and lstm
+paths are built to make as few as possible: every bias is folded into its matrix as a
+last column so a layer is one matvec, every buffer is allocated once, and each layer
+writes its activation straight into the next one's input. The transformer path still
+goes through linear(), which is the readable form; it is not deployed.
 """
 
 import os
@@ -20,6 +24,12 @@ ROOT = os.path.join(
 
 EPS = 1e-5
 
+# Bound once: on the brick a global-then-attribute lookup is not free at 20 Hz.
+dot = np.dot
+tanh = np.tanh
+clip = np.clip
+multiply = np.multiply
+
 
 def linear(params, name, x):
     return x @ params[name + ".w"].T + params[name + ".b"]
@@ -31,13 +41,39 @@ def layer_norm(params, name, x):
     return normed * params[name + ".w"] + params[name + ".b"]
 
 
-def sigmoid(x):
-    return 1.0 / (1.0 + np.exp(-x))
-
-
 def softmax(x):
     e = np.exp(x - x.max(-1, keepdims=True))
     return e / e.sum(-1, keepdims=True)
+
+
+def folded(params, name, scale=1.0):
+    """[W | b] as one matrix, so one matvec applies the bias too."""
+    w = params[name + ".w"]
+    b = params[name + ".b"]
+    return (np.concatenate((w, b.reshape(-1, 1)), 1) * scale).astype(np.float32)
+
+
+def inlet(size):
+    """Input buffer for a folded layer: size values, then the 1 the bias multiplies."""
+    return np.ones(size + 1, np.float32)
+
+
+class Dense:
+    """y = w @ x, the bias being w's last column against x's last entry, a fixed 1.
+
+    x belongs to whatever runs before, which writes into it, so a layer boundary
+    costs no copy.
+    """
+
+    def __init__(self, name, w, x):
+        self.name = name
+        self.w = w
+        self.x = x
+        self.y = np.zeros(w.shape[0], np.float32)
+        self.into = None
+
+    def forward(self):
+        return dot(self.w, self.x, out=self.y)
 
 
 class NetPolicy(Policy):
@@ -48,42 +84,118 @@ class NetPolicy(Policy):
         self.started = False
 
         if self.arch == "lstm":
-            hidden = int(params["hidden"])
-            self.h = np.zeros(hidden, np.float32)
-            self.c = np.zeros(hidden, np.float32)
-        elif self.arch == "transformer":
-            window = int(params["window"])
-            # Zero padded, like VecFrameStack, which clears the stack on every reset.
-            self.window = np.zeros((window, int(params["frame"])), np.float32)
-            self.mask = np.triu(np.full((window, window), -np.inf, np.float32), 1)
+            head_in = self._build_lstm()
+            self.core = self._recurrent
+        elif self.arch == "mlp":
+            head_in = inlet(params["pi.0.w"].shape[1])
+            self.source = head_in[:-1]
+            self.core = self._feed
+        else:
+            head_in = inlet(self._build_transformer())
+            self.source = head_in[:-1]
+            self.core = self._attend
+
+        self.head = []
+        x = head_in
+        for i in range(int(params["pi_layers"])):
+            layer = Dense("pi.%d" % i, folded(params, "pi.%d" % i), x)
+            x = inlet(layer.y.size)
+            layer.into = x[:-1]
+            self.head.append(layer)
+
+        # clip(W h + b, -1, 1) * VOLTS is clip(VOLTS W h + VOLTS b, -VOLTS, VOLTS).
+        self.action = Dense("action", folded(params, "action", VOLTS), x)
+
+    def _build_lstm(self):
+        """Returns the head's input buffer, which is [h; 1] inside the gate input."""
+        p = self.p
+        hidden = int(p["hidden"])
+        dim = p["lstm.ih.w"].shape[1]
+
+        # torch keeps the four gates in one matrix as i, f, g, o and adds both biases.
+        self.gw = np.concatenate(
+            (p["lstm.ih.w"], p["lstm.hh.w"],
+             (p["lstm.ih.b"] + p["lstm.hh.b"]).reshape(-1, 1)), 1).astype(np.float32)
+
+        # [x; h; 1]. h lives here, so the head reads it and the next step's matvec
+        # takes it without either of them copying anything.
+        self.gates_in = np.ones(dim + hidden + 1, np.float32)
+        self.source = self.gates_in[:dim]
+        self.h = self.gates_in[dim:dim + hidden]
+        self.h[:] = 0.0
+        self.c = np.zeros(hidden, np.float32)
+        self.gates = np.zeros(4 * hidden, np.float32)
+        self.tmp = np.zeros(hidden, np.float32)
+
+        self.i = self.gates[:hidden]
+        self.f = self.gates[hidden:2 * hidden]
+        self.g = self.gates[2 * hidden:3 * hidden]
+        self.o = self.gates[3 * hidden:]
+
+        # sigmoid(z) = 0.5 tanh(0.5 z) + 0.5, so a single tanh covers all four gates:
+        # i, f and o carry the halves, g carries one and zero and stays a plain tanh.
+        # The inner half is folded into the matrix, so the step does not scale at all.
+        self.post = np.full(4 * hidden, 0.5, np.float32)
+        self.shift = np.full(4 * hidden, 0.5, np.float32)
+        self.post[2 * hidden:3 * hidden] = 1.0
+        self.shift[2 * hidden:3 * hidden] = 0.0
+        self.gw *= self.post.reshape(-1, 1)
+
+        return self.gates_in[dim:]
+
+    def _build_transformer(self):
+        """Returns the model dimension, which is what the head takes."""
+        p = self.p
+        size = int(p["window"])
+        # Zero padded, like VecFrameStack, which clears the stack on every reset.
+        self.window = np.zeros((size, int(p["frame"])), np.float32)
+        self.mask = np.triu(np.full((size, size), -np.inf, np.float32), 1)
+        return p["enc.project.w"].shape[0]
 
     def act(self, obs):
-        x = self.features.update(obs) if self.started else self.features.first(obs)
+        # The feature list goes straight into the input buffer: building an array of
+        # it first would be one more numpy call for two numbers.
+        values = self.features.update(obs) if self.started else self.features.first(obs)
         self.started = True
-        return self.act_features(np.asarray(x, np.float32))
+        self.core(values)
+        return self._forward()
 
     def act_features(self, x):
-        """Separate from act so check_export.py can compare networks, not feature code."""
-        if self.arch == "mlp":
-            h = x
-        elif self.arch == "lstm":
-            h = self._lstm(x)
-        else:
-            h = self._transformer(x)
+        """Separate from act so tests/test_export.py compares networks, not features."""
+        self.core(x)
+        return self._forward()
 
-        for i in range(int(self.p["pi_layers"])):
-            h = np.tanh(linear(self.p, "pi.%d" % i, h))
+    def _feed(self, x):
+        self.source[:] = x
 
-        action = np.clip(linear(self.p, "action", h), -1.0, 1.0) * VOLTS
-        return float(action[0]), float(action[1])
+    def _recurrent(self, x):
+        self.source[:] = x
+        self._step()
 
-    def _lstm(self, x):
-        gates = linear(self.p, "lstm.ih", x) + linear(self.p, "lstm.hh", self.h)
-        i, f, g, o = np.split(gates, 4)
+    def _attend(self, x):
+        self.source[:] = self._transformer(np.asarray(x, np.float32))
 
-        self.c = sigmoid(f) * self.c + sigmoid(i) * np.tanh(g)
-        self.h = sigmoid(o) * np.tanh(self.c)
-        return self.h
+    def _forward(self):
+        for layer in self.head:
+            tanh(layer.forward(), out=layer.into)
+
+        y = self.action.forward()
+        clip(y, -VOLTS, VOLTS, out=y)
+        # tolist is one call for both numbers; indexing them is two numpy scalars.
+        return y.tolist()
+
+    def _step(self):
+        gates = self.gates
+        dot(self.gw, self.gates_in, out=gates)
+        tanh(gates, out=gates)
+        gates *= self.post
+        gates += self.shift
+
+        self.c *= self.f
+        multiply(self.i, self.g, out=self.tmp)
+        self.c += self.tmp
+        tanh(self.c, out=self.tmp)
+        multiply(self.o, self.tmp, out=self.h)
 
     def _transformer(self, x):
         self.window[:-1] = self.window[1:]

@@ -1,4 +1,4 @@
-# Host only. The brick has python 3.9 with numpy and python-ev3dev2, nothing here.
+# Host only. The brick has python 3.5 with numpy 1.12 and python-ev3dev2, nothing here.
 stable-baselines3
 sb3-contrib
 tensorboard
