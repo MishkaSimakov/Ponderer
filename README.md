@@ -47,7 +47,7 @@ B: правый мотор
 
 ```
 ssh ev3dev 'cd ponderer && python3 experiments/inference_timing.py'
-ssh ev3dev 'cd ponderer && python3 experiments/loop_timing.py'
+ssh ev3dev 'cd ponderer && python3 experiments/loop_timing.py [частота] [шагов]'
 ```
 
 - `experiments/inference_timing.py` — один прямой проход без железа: mlp и lstm
@@ -59,6 +59,19 @@ ssh ev3dev 'cd ponderer && python3 experiments/loop_timing.py'
   `features`, `net`, `log`, `volts`, `duty`, затем сон до дедлайна, затем `write`
   и `observe`. `body` — их сумма, то есть работа, которая обязана уложиться в
   период. Моторы крутятся, робота надо куда-то поставить.
+
+## Частота управления
+
+25 Гц: `brick/run.py` FREQUENCY и `Bridge.controlPeriod` в сцене. Верхнюю границу
+задаёт `body` из `loop_timing.py` — для lstm с hidden 8 и без ультразвука это
+27 мс по медиане и 34 мс по p95, и от частоты она не зависит. Отсюда переработки:
+1.7% шагов на 25 Гц, 14% на 30 Гц, 38% на 35 Гц. 40 мс оставляют запас над p95, а
+33 мс — уже нет. Период кратен `physicsDt` 0.005, так что в симуляции на шаг
+приходится ровно 8 подшагов, а не округление.
+
+Из 27 мс шага: `observe` 9 мс, `net` 8 мс, `volts` 3 мс, `write` 3 мс,
+`features` 2 мс, `log` и `duty` по 1.5 мс. Всё, кроме `net`, — это sysfs и
+питон, а не арифметика.
 
 Один вызов numpy на кирпиче стоит около 240 мкс, а сеть — это полторы тысячи
 умножений, так что шаг измеряется в вызовах, а не в арифметике. Поэтому

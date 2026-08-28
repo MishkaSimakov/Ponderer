@@ -14,7 +14,7 @@ public class Bridge : MonoBehaviour
     // One policy step, the same constant as brick/run.py's FREQUENCY. The brick sleeps
     // to this deadline instead of running as fast as it can, so the step length is a
     // number both sides are set to rather than a distribution fitted to a brick log.
-    [SerializeField] float controlPeriod = 0.0667f;
+    [SerializeField] float controlPeriod = 0.04f;
     [SerializeField] float physicsDt = 0.005f;
     [SerializeField] int editorPort = 5005;
     [SerializeField] int editorArenas = 1;

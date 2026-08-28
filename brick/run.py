@@ -27,7 +27,7 @@ NAME = "net"  # logs/brick/<NAME>-<utc>.csv
 # NAME = "constant"
 
 STEPS = 1000  # if None, then the policy's own schedule, or until ctrl-c if it has none
-FREQUENCY = 15.0  # the same period as Bridge.controlPeriod
+FREQUENCY = 25.0  # the same period as Bridge.controlPeriod
 
 period = 1.0 / FREQUENCY
 policy = POLICY()
