@@ -7,8 +7,9 @@ same object brick/run.py runs, fed synthetic weights under the key names rl/expo
 writes. There is no second implementation of the network here to drift from net.py.
 
 Two passes per configuration. The plain pass is the honest number. The instrumented
-pass wraps net.linear to say which layer the time went to; its total is larger by the
-cost of the wrapper, so the two are reported apart.
+pass wraps the matvec of each layer, and the lstm step as a whole, to say where the
+time went; its total is larger by the cost of the wrapper, so the two are reported
+apart.
 
 A step this small is a few thousand multiply-accumulates. Against the numpy floor
 printed at the top, the report says whether a forward pass costs arithmetic or costs
@@ -110,17 +111,28 @@ def plain(policy, sequence):
 
 
 def instrumented(policy, sequence):
-    """Per linear call, plus what is left over: activations and the elementwise gates."""
+    """Per layer, plus what is left over: the activations between them."""
     calls = []
-    original = net.linear
+    dense, step, plain_linear = net.Dense.forward, net.NetPolicy._step, net.linear
 
-    def timed(p, name, x):
+    def timed_dense(self):
         t = time.monotonic()
-        y = original(p, name, x)
+        y = dense(self)
+        calls.append((self.name, time.monotonic() - t))
+        return y
+
+    def timed_step(self):
+        t = time.monotonic()
+        step(self)
+        calls.append(("lstm", time.monotonic() - t))
+
+    def timed_linear(p, name, x):
+        t = time.monotonic()
+        y = plain_linear(p, name, x)
         calls.append((name, time.monotonic() - t))
         return y
 
-    net.linear = timed
+    net.Dense.forward, net.NetPolicy._step, net.linear = timed_dense, timed_step, timed_linear
     try:
         for x in sequence[:WARMUP]:
             policy.act_features(x)
@@ -133,7 +145,7 @@ def instrumented(policy, sequence):
             total = time.monotonic() - t
             steps.append((list(calls), total))
     finally:
-        net.linear = original
+        net.Dense.forward, net.NetPolicy._step, net.linear = dense, step, plain_linear
 
     return steps
 

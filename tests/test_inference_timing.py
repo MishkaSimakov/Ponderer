@@ -105,18 +105,18 @@ def test_the_instrumented_phases_add_up_to_the_step_they_split(tmp_path, monkeyp
         assert sum(phases.values()) == pytest.approx(total, abs=1e-9)
 
 
-def test_the_instrumented_pass_names_every_linear_the_network_runs(tmp_path, monkeypatch):
+def test_the_instrumented_pass_names_every_layer_the_network_runs(tmp_path, monkeypatch):
     rows = sweep(tmp_path, monkeypatch, archs=("lstm",), steps=3)
 
     named = set(r["phase"] for r in rows if r["pass"] == "instrumented")
-    assert named == {"lstm.ih", "lstm.hh", "pi.0", "action", "elementwise", "total"}
+    assert named == {"lstm", "pi.0", "action", "elementwise", "total"}
 
 
-def test_wrapping_linear_is_undone_afterwards(tmp_path, monkeypatch):
-    """The instrumented pass patches a module global; the plain pass must be plain."""
+def test_the_wrappers_are_undone_afterwards(tmp_path, monkeypatch):
+    """The instrumented pass patches shared state; the plain pass must be plain."""
     from shared.policies import net
 
-    original = net.linear
+    before = (net.Dense.forward, net.NetPolicy._step, net.linear)
     sweep(tmp_path, monkeypatch, steps=3)
 
-    assert net.linear is original
+    assert (net.Dense.forward, net.NetPolicy._step, net.linear) == before
