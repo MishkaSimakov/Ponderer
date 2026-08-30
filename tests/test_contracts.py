@@ -27,13 +27,14 @@ UNITY_OBSERVATION = {
     "rightMotor.GetDegrees()": "right_position",
 }
 
-# python expression in BrickRobot._observe -> column it returns.
+# python expression in BrickRobot._observe -> column it returns. The reads are sysfs
+# by hand, so the names here are the descriptors the robot opens, not ev3dev2's.
 BRICK_OBSERVATION = {
     "time.monotonic() - self.start": "t",
-    "self.left_color.reflected_light_intensity": "left_color",
-    "self.right_color.reflected_light_intensity": "right_color",
-    "self.left_motor.position": "left_position",
-    "self.right_motor.position": "right_position",
+    "int(os.pread(self.left_light, READ_SIZE, 0))": "left_color",
+    "int(os.pread(self.right_light, READ_SIZE, 0))": "right_color",
+    "int(os.pread(self.left_tacho, READ_SIZE, 0))": "left_position",
+    "int(os.pread(self.right_tacho, READ_SIZE, 0))": "right_position",
 }
 
 # ev3dev ships python 3.5.3 and numpy 1.12; there is no other interpreter on the

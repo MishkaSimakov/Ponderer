@@ -6,6 +6,9 @@ log, then brick.BrickRobot.step reads the battery and converts both duties, slee
 the deadline, writes the two duty cycles and observes. So everything except the write
 and the observe happens before the deadline, and body is the work one period covers.
 
+Every read and write here is the robot's own, on the descriptors it opened, so volts,
+write and observe cost what the loop costs and not what ev3dev2 would.
+
 act is split into the two halves NetPolicy.act runs: building the features from the
 observation, and the forward pass. The second is the inference number.
 
@@ -26,7 +29,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import numpy as np
 
-from brick.brick_robot import BrickRobot
+from brick.brick_robot import BrickRobot, READ_SIZE
 from shared.csv_logger import CsvLogger
 from shared.logs import run_prefix
 from shared.policies.net import NetPolicy, latest
@@ -79,7 +82,7 @@ try:
         t2 = time.monotonic()
         rows.log(action[0], action[1], *obs)
         t3 = time.monotonic()
-        volts = robot.battery.measured_volts
+        volts = int(os.pread(robot.voltage, READ_SIZE, 0)) / 1e6
         t4 = time.monotonic()
         left = robot._duty(action[0], volts)
         right = robot._duty(action[1], volts)
@@ -94,8 +97,8 @@ try:
             deadline = time.monotonic()
 
         t6 = time.monotonic()
-        robot.left_motor.duty_cycle_sp = left
-        robot.right_motor.duty_cycle_sp = right
+        os.pwrite(robot.left_duty, str(left).encode(), 0)
+        os.pwrite(robot.right_duty, str(right).encode(), 0)
         t7 = time.monotonic()
         obs = robot._observe()
         t8 = time.monotonic()
