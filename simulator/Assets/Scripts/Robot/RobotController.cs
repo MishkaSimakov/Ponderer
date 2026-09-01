@@ -3,10 +3,9 @@ using UnityEngine;
 
 public class RobotController : MonoBehaviour, IArenaResettable
 {
-    public const int ObsDim = 6;
+    public const int ObsDim = 5;
     public const int ActionDim = 2;
 
-    [SerializeField] UltrasonicSensor ultrasonic;
     [SerializeField] ColorSensor leftColor;
     [SerializeField] ColorSensor rightColor;
 
@@ -51,10 +50,9 @@ public class RobotController : MonoBehaviour, IArenaResettable
     public void Observe(float[] destination, int offset)
     {
         destination[offset + 0] = ElapsedSeconds;
-        destination[offset + 1] = ultrasonic.DistanceCm;
-        destination[offset + 2] = leftColor.Reflected;
-        destination[offset + 3] = rightColor.Reflected;
-        destination[offset + 4] = leftMotor.GetDegrees();
-        destination[offset + 5] = rightMotor.GetDegrees();
+        destination[offset + 1] = leftColor.Reflected;
+        destination[offset + 2] = rightColor.Reflected;
+        destination[offset + 3] = leftMotor.GetDegrees();
+        destination[offset + 4] = rightMotor.GetDegrees();
     }
 }

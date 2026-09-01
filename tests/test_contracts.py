@@ -21,21 +21,20 @@ SCENE = read("simulator", "Assets", "Scenes", "Simulation.unity")
 # c# expression in RobotController.Observe -> column it writes.
 UNITY_OBSERVATION = {
     "ElapsedSeconds": "t",
-    "ultrasonic.DistanceCm": "distance",
     "leftColor.Reflected": "left_color",
     "rightColor.Reflected": "right_color",
     "leftMotor.GetDegrees()": "left_position",
     "rightMotor.GetDegrees()": "right_position",
 }
 
-# python expression in BrickRobot._observe -> column it returns.
+# python expression in BrickRobot._observe -> column it returns. The reads are sysfs
+# by hand, so the names here are the descriptors the robot opens, not ev3dev2's.
 BRICK_OBSERVATION = {
     "time.monotonic() - self.start": "t",
-    "self.distance.distance_centimeters_continuous": "distance",
-    "self.left_color.reflected_light_intensity": "left_color",
-    "self.right_color.reflected_light_intensity": "right_color",
-    "self.left_motor.position": "left_position",
-    "self.right_motor.position": "right_position",
+    "int(os.pread(self.left_light, READ_SIZE, 0))": "left_color",
+    "int(os.pread(self.right_light, READ_SIZE, 0))": "right_color",
+    "int(os.pread(self.left_tacho, READ_SIZE, 0))": "left_position",
+    "int(os.pread(self.right_tacho, READ_SIZE, 0))": "right_position",
 }
 
 # ev3dev ships python 3.5.3 and numpy 1.12; there is no other interpreter on the

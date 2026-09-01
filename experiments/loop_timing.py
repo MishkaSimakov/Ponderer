@@ -6,6 +6,9 @@ log, then brick.BrickRobot.step reads the battery and converts both duties, slee
 the deadline, writes the two duty cycles and observes. So everything except the write
 and the observe happens before the deadline, and body is the work one period covers.
 
+Every read and write here is the robot's own, on the descriptors it opened, so volts,
+write and observe cost what the loop costs and not what ev3dev2 would.
+
 act is split into the two halves NetPolicy.act runs: building the features from the
 observation, and the forward pass. The second is the inference number.
 
@@ -15,7 +18,7 @@ One row per step in logs/brick/<NAME>-<utc>.csv, written after the loop so that
 writing it does not land inside a step. The row the loop logs is a real run's row,
 so its cost is a real run's cost.
 
-    ./experiments/loop_timing.py
+    ./experiments/loop_timing.py [frequency] [steps]
 """
 
 import os
@@ -26,7 +29,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import numpy as np
 
-from brick.brick_robot import BrickRobot
+from brick.brick_robot import BrickRobot, READ_SIZE
 from shared.csv_logger import CsvLogger
 from shared.logs import run_prefix
 from shared.policies.net import NetPolicy, latest
@@ -40,6 +43,10 @@ FREQUENCY = 20.0
 CLOCK_CALLS = 10000
 
 PHASES = ["features", "net", "log", "volts", "duty", "write", "observe", "body"]
+
+# Sweeping the rate is the point of the script, so both come off the command line.
+FREQUENCY = float(sys.argv[1]) if len(sys.argv) > 1 else FREQUENCY
+STEPS = int(sys.argv[2]) if len(sys.argv) > 2 else STEPS
 
 period = 1.0 / FREQUENCY
 policy = POLICY()
@@ -75,7 +82,7 @@ try:
         t2 = time.monotonic()
         rows.log(action[0], action[1], *obs)
         t3 = time.monotonic()
-        volts = robot.battery.measured_volts
+        volts = int(os.pread(robot.voltage, READ_SIZE, 0)) / 1e6
         t4 = time.monotonic()
         left = robot._duty(action[0], volts)
         right = robot._duty(action[1], volts)
@@ -90,8 +97,8 @@ try:
             deadline = time.monotonic()
 
         t6 = time.monotonic()
-        robot.left_motor.duty_cycle_sp = left
-        robot.right_motor.duty_cycle_sp = right
+        os.pwrite(robot.left_duty, str(left).encode(), 0)
+        os.pwrite(robot.right_duty, str(right).encode(), 0)
         t7 = time.monotonic()
         obs = robot._observe()
         t8 = time.monotonic()
