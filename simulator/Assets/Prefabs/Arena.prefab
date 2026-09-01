@@ -4850,7 +4850,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 22c879f84b4d840818cff61ba64c48c1, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::RobotController
-  ultrasonic: {fileID: 4300102847079524635}
   leftColor: {fileID: 1805699769284606692}
   rightColor: {fileID: 3439303719997606586}
   leftMotor: {fileID: 7960761506765720433}
