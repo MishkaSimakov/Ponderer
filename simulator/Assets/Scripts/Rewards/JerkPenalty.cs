@@ -1,13 +1,13 @@
 using UnityEngine;
 
-// Charged when the commanded voltage of either motor jumps by more than the
-// threshold since the previous step. The first step of an episode is measured
-// against the standstill the robot resets to.
+// Charged while the commanded voltage of either motor changes faster than the
+// threshold. The first step of an episode is measured against the standstill the
+// robot resets to.
 public class JerkPenalty : MonoBehaviour, IReward, IArenaResettable
 {
-    // Voltage change tolerated for free, volts.
-    [SerializeField] float threshold = 0.7f;
-    [SerializeField] float penalty = 0.1f;
+    // Rate of voltage change tolerated for free, volts per second.
+    [SerializeField] float thresholdVoltsPerSecond = 2.5f;
+    [SerializeField] float penaltyPerSecond = 2.5f;
 
     RobotAction previous;
 
@@ -20,9 +20,10 @@ public class JerkPenalty : MonoBehaviour, IReward, IArenaResettable
 
     public float Evaluate(in RewardContext ctx)
     {
-        bool jerk = Mathf.Abs(ctx.Action.Left - previous.Left) > threshold ||
-            Mathf.Abs(ctx.Action.Right - previous.Right) > threshold;
+        float tolerated = thresholdVoltsPerSecond * ctx.Dt;
+        bool jerk = Mathf.Abs(ctx.Action.Left - previous.Left) > tolerated ||
+            Mathf.Abs(ctx.Action.Right - previous.Right) > tolerated;
         previous = ctx.Action;
-        return jerk ? -penalty : 0f;
+        return jerk ? -penaltyPerSecond * ctx.Dt : 0f;
     }
 }

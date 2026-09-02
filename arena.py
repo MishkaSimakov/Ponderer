@@ -12,6 +12,7 @@ import importlib
 import time
 
 from bridge.sim_robot import Simulation, SimRobot
+from bridge.step_clock import StepClock, load
 from shared.observation import COLUMNS
 from shared.runner import run
 
@@ -74,7 +75,8 @@ def main():
                         help="wall clock pacing only, <1 slows the picture down")
     args = parser.parse_args()
 
-    sim = Simulation(port=args.port, session_seed=args.seed)
+    sim = Simulation(StepClock(load(), args.seed), port=args.port,
+                     session_seed=args.seed)
     robot = SimRobot(sim, seed=args.seed, randomize_scenario=args.randomize_scenario,
                      randomize_physics=args.randomize_physics)
     policy = resolve(args.policy)()

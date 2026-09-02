@@ -7,14 +7,10 @@ using UnityEngine;
 // Python drives the simulation: one request advances one control step.
 public class Bridge : MonoBehaviour
 {
-    const int Version = 3;
+    const int Version = 4;
 
     [SerializeField] Arena arenaPrefab;
     [SerializeField] float arenaSpacing = 20f;
-    // One policy step, the same constant as brick/run.py's FREQUENCY. The brick sleeps
-    // to this deadline instead of running as fast as it can, so the step length is a
-    // number both sides are set to rather than a distribution fitted to a brick log.
-    float controlPeriod = 0.04f;
     float physicsDt = 0.005f;
 
     [SerializeField] int editorPort = 5005;
@@ -36,7 +32,6 @@ public class Bridge : MonoBehaviour
         Application.runInBackground = true;
 
         Physics.simulationMode = SimulationMode.Script;
-        Time.fixedDeltaTime = physicsDt;
 
         int count = Args.GetInt("arenas", editorArenas);
         arenas = new Arena[count];
@@ -88,7 +83,6 @@ public class Bridge : MonoBehaviour
                 {
                     version = Version,
                     arenas = arenas.Length,
-                    dt = controlPeriod,
                     obs_dim = RobotController.ObsDim,
                     action_dim = RobotController.ActionDim,
                     reward_terms = arenas[0].TermNames
@@ -105,7 +99,7 @@ public class Bridge : MonoBehaviour
                 return JsonUtility.ToJson(Gather());
 
             case "step":
-                StepAll(request.actions);
+                StepAll(request.actions, request.dt);
                 return JsonUtility.ToJson(Gather());
 
             case "quit":
@@ -117,16 +111,22 @@ public class Bridge : MonoBehaviour
         throw new Exception("unknown command: " + request.cmd);
     }
 
-    void StepAll(float[] actions)
+    void StepAll(float[] actions, float dt)
     {
         int expected = arenas.Length * RobotController.ActionDim;
         if (actions == null || actions.Length != expected)
             throw new Exception("expected " + expected + " action values");
 
+        // JsonUtility leaves a field python did not send at zero, which would stop time.
+        if (dt <= 0f) throw new Exception("step dt must be positive, got " + dt);
+
         // Equal substeps near physicsDt rather than whole ones plus a remainder, which
         // would leave a last step short enough to be degenerate.
-        int substeps = Mathf.Max(1, Mathf.RoundToInt(controlPeriod / physicsDt));
-        float substep = controlPeriod / substeps;
+        int substeps = Mathf.Max(1, Mathf.RoundToInt(dt / physicsDt));
+        float substep = dt / substeps;
+        // The solver reads this for sleeping thresholds and contact caching, so it
+        // follows the substep it is handed rather than a constant beside it.
+        Time.fixedDeltaTime = substep;
 
         for (int s = 0; s < substeps; s++)
         {
@@ -140,7 +140,7 @@ public class Bridge : MonoBehaviour
         for (int i = 0; i < arenas.Length; i++)
             arenas[i].ApplyAction(actions[i * 2], actions[i * 2 + 1]);
 
-        for (int i = 0; i < arenas.Length; i++) arenas[i].AdvanceStep();
+        for (int i = 0; i < arenas.Length; i++) arenas[i].AdvanceStep(dt);
     }
 
     StateResponse Gather()

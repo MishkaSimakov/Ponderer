@@ -23,6 +23,7 @@ from stable_baselines3.common.vec_env import VecEnv
 
 from bridge.launcher import Unity
 from bridge.sim_robot import Simulation, Step
+from bridge.step_clock import StepClock, load
 from shared.action import VOLTS
 from shared.features import DIM, Features
 
@@ -40,8 +41,11 @@ def make(env=None, num_envs=1, arenas=1, base_port=5005, seed=0, graphics=False,
         for port in ports]
 
     try:
-        # Instances must not replay the same episodes, so each gets its own seed root.
-        sims = [Simulation(port=port, session_seed=seed + i, timeout=timeout)
+        # Instances must not replay the same episodes, so each gets its own seed root,
+        # and with it its own sequence of step lengths.
+        durations = load()
+        sims = [Simulation(StepClock(durations, seed + i), port=port,
+                           session_seed=seed + i, timeout=timeout)
                 for i, port in enumerate(ports)]
     except Exception:
         for process in processes:

@@ -12,6 +12,8 @@ public class Request
     public bool randomize_scenario;
     public bool randomize_physics;
     public float[] actions;
+    // Seconds this step covers, drawn by python from the brick's measured steps.
+    public float dt;
 }
 
 [Serializable]
@@ -19,7 +21,6 @@ public class HandshakeResponse
 {
     public int version;
     public int arenas;
-    public float dt;
     public int obs_dim;
     public int action_dim;
     public string[] reward_terms;

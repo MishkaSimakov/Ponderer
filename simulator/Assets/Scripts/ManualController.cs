@@ -63,7 +63,7 @@ public class ManualController : MonoBehaviour
                 arena.Tick(physicsDt);
                 Physics.Simulate(physicsDt);
             }
-            arena.AdvanceStep();
+            arena.AdvanceStep(controlPeriod);
         }
 
         arena.Observe(obs, 0);

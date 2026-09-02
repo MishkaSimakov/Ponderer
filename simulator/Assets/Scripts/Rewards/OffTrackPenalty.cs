@@ -1,12 +1,12 @@
 using UnityEngine;
 
-// Charged every step the robot is off the line.
+// Charged for every second the robot is off the line.
 public class OffTrackPenalty : MonoBehaviour, IReward
 {
-    [SerializeField] float penalty = 0.5f;
+    [SerializeField] float penaltyPerSecond = 1.25f;
 
     public float Evaluate(in RewardContext ctx)
     {
-        return ctx.OffTrack ? -penalty : 0f;
+        return ctx.OffTrack ? -penaltyPerSecond * ctx.Dt : 0f;
     }
 }

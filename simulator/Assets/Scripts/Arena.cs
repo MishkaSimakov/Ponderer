@@ -5,7 +5,7 @@ using UnityEngine;
 
 public class Arena : MonoBehaviour
 {
-    [SerializeField] int maxSteps = 200;
+    [SerializeField] float maxSeconds = 20f;
     [SerializeField] RobotController robot;
     [SerializeField] TrackController track;
     // Lateral distance past which the robot counts as off the line, meters.
@@ -20,6 +20,7 @@ public class Arena : MonoBehaviour
     float[] termScratch;
     float[] terms;
     RobotAction action;
+    float elapsed;
     float episodeReward;
     int index;
     int sessionSeed;
@@ -77,6 +78,7 @@ public class Arena : MonoBehaviour
 
         Episode++;
         Step = 0;
+        elapsed = 0f;
         Terminated = false;
         Truncated = false;
         Reward = 0f;
@@ -97,10 +99,10 @@ public class Arena : MonoBehaviour
         Physics.SyncTransforms();
     }
 
-    // Manual play has no step limit: only conditions end an episode.
+    // Manual play has no time limit: only conditions end an episode.
     public void DisableTruncation()
     {
-        maxSteps = 0;
+        maxSeconds = 0f;
     }
 
     public int NextSeed()
@@ -120,14 +122,15 @@ public class Arena : MonoBehaviour
         robot.Tick(dt);
     }
 
-    public void AdvanceStep()
+    public void AdvanceStep(float dt)
     {
         Step++;
+        elapsed += dt;
 
         // Summed before the auto reset, on the same state terminalObs captures.
         TrackSample sample = track.Sample(robot.transform.position);
         RewardContext ctx = new RewardContext(
-            robot, action, sample, Mathf.Abs(sample.Offset) > offTrackDistance);
+            robot, action, sample, Mathf.Abs(sample.Offset) > offTrackDistance, dt);
         float reward = 0f;
         Array.Clear(termScratch, 0, termScratch.Length);
         for (int i = 0; i < rewards.Length; i++)
@@ -142,7 +145,7 @@ public class Arena : MonoBehaviour
         }
 
         // Terminated: the episode genuinely ended, no future return exists.
-        // Truncated: the step limit cut off an episode that would have continued.
+        // Truncated: the time limit cut off an episode that would have continued.
         // A trainer bootstraps the value function for the second case only.
         bool terminated = false;
         for (int i = 0; i < conditions.Length; i++)
@@ -153,7 +156,7 @@ public class Arena : MonoBehaviour
             termScratch[rewards.Length + i] = conditions[i].Reward;
             Trace(conditions[i], conditions[i].Reward);
         }
-        bool truncated = !terminated && maxSteps > 0 && Step >= maxSteps;
+        bool truncated = !terminated && maxSeconds > 0f && elapsed >= maxSeconds;
 
         episodeReward += reward;
 

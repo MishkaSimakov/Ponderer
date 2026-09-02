@@ -16,7 +16,11 @@ from shared.observation import COLUMNS, DIM
 
 BRIDGE = read("simulator", "Assets", "Scripts", "Bridge.cs")
 CONTROLLER = read("simulator", "Assets", "Scripts", "Robot", "RobotController.cs")
+PROTOCOL = read("simulator", "Assets", "Scripts", "Protocol.cs")
 SCENE = read("simulator", "Assets", "Scenes", "Simulation.unity")
+ARENA_CS = read("simulator", "Assets", "Scripts", "Arena.cs")
+ARENA_PREFAB = read("simulator", "Assets", "Prefabs", "Arena.prefab")
+REWARDS = ("simulator", "Assets", "Scripts", "Rewards")
 
 # c# expression in RobotController.Observe -> column it writes.
 UNITY_OBSERVATION = {
@@ -113,6 +117,51 @@ def test_the_brick_is_not_pinned_to_a_control_rate():
     assert re.search(r"\bFREQUENCY\b", read("brick", "run.py")) is None
     assert "sleep" not in read("brick", "brick_robot.py")
     assert "sleep" not in read("shared", "runner.py")
+
+
+def test_unity_is_not_pinned_to_a_control_rate():
+    """The step length arrives with every step request; there is no period to keep."""
+    assert "controlPeriod" not in BRIDGE
+
+
+def request_fields(source):
+    """Field names unity will deserialize a request into."""
+    block = source.split("public class Request")[1].split("}")[0]
+    return set(re.findall(r"^\s+public [\w\[\]]+ (\w+);", block, re.MULTILINE))
+
+
+def sent_keys(source):
+    """String keys of every dict literal python hands to the connection."""
+    keys = set()
+    for node in ast.walk(ast.parse(source)):
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+            continue
+        if node.func.attr not in ("request", "send"):
+            continue
+        for argument in node.args:
+            if isinstance(argument, ast.Dict):
+                keys.update(k.value for k in argument.keys if isinstance(k, ast.Constant))
+    return keys
+
+
+def test_every_key_python_sends_is_a_request_field():
+    """A key unity has no field for is dropped in silence, and reads there as zero."""
+    assert sent_keys(read("bridge", "sim_robot.py")) <= request_fields(PROTOCOL)
+
+
+def test_the_step_request_carries_the_step_length():
+    assert "dt" in request_fields(PROTOCOL)
+    assert "dt" in sent_keys(read("bridge", "sim_robot.py"))
+
+
+def test_the_arena_prefab_has_no_fields_the_scripts_dropped():
+    """A renamed field leaves its old value in the prefab, where it is read by nothing
+    and looks like it is still in force. Open the prefab in the editor and save it."""
+    for component, source in (("Arena", ARENA_CS),
+                              ("StepPenalty", read(*REWARDS, "StepPenalty.cs")),
+                              ("OffTrackPenalty", read(*REWARDS, "OffTrackPenalty.cs")),
+                              ("JerkPenalty", read(*REWARDS, "JerkPenalty.cs"))):
+        assert scene_fields(ARENA_PREFAB, component) <= serialized_fields(source), component
 
 
 def test_scene_has_no_fields_the_bridge_script_dropped():

@@ -10,9 +10,14 @@ Step = namedtuple("Step", "obs terminal_obs reward terms terminated truncated ep
 
 
 class Simulation:
-    """All arenas of one Unity process, one round trip per control step."""
+    """All arenas of one Unity process, one round trip per control step.
 
-    def __init__(self, port=5005, host="127.0.0.1", session_seed=0, timeout=30.0):
+    The clock is this process's alone. Physics.Simulate covers the whole unity scene, so
+    every arena inside one process advances by the same step, and separate processes draw
+    separate sequences.
+    """
+
+    def __init__(self, clock, port=5005, host="127.0.0.1", session_seed=0, timeout=30.0):
         self.conn = Connection(host, port, timeout=timeout)
         info = self.conn.request({
             "cmd": "handshake",
@@ -23,13 +28,13 @@ class Simulation:
         if info["version"] != PROTOCOL_VERSION:
             raise RuntimeError("protocol version mismatch: unity %d" % info["version"])
 
+        self.clock = clock
         self.arenas = info["arenas"]
-        self.dt = info["dt"]
         self.obs_dim = info["obs_dim"]
         self.action_dim = info["action_dim"]
         self.reward_terms = info["reward_terms"]
-        print("handshake: %d arenas, dt %.4f, obs_dim %d, action_dim %d, session_seed %d"
-              % (self.arenas, self.dt, self.obs_dim, self.action_dim, session_seed))
+        print("handshake: %d arenas, obs_dim %d, action_dim %d, session_seed %d"
+              % (self.arenas, self.obs_dim, self.action_dim, session_seed))
         print("reward terms: %s" % ", ".join(self.reward_terms))
 
     def reset(self, seeds=None, randomize_scenario=True, randomize_physics=False):
@@ -55,7 +60,7 @@ class Simulation:
         if len(actions) != self.arenas:
             raise ValueError("expected %d actions" % self.arenas)
         flat = [float(v) for action in actions for v in action]
-        self.conn.send({"cmd": "step", "actions": flat})
+        self.conn.send({"cmd": "step", "actions": flat, "dt": self.clock.sample()})
 
     def step_wait(self):
         return self._unpack(self.conn.recv())
