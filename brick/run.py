@@ -11,7 +11,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from shared.runner import run, steps_for
+from shared.runner import run
 from brick.brick_robot import BrickRobot
 from shared.policies.experiments.duty_steps import DutyStepsPolicy
 from shared.policies.net import latest
@@ -27,11 +27,8 @@ NAME = "net"  # logs/brick/<NAME>-<utc>.csv
 # NAME = "constant"
 
 STEPS = 1000  # if None, then the policy's own schedule, or until ctrl-c if it has none
-FREQUENCY = 25.0  # the same period as Bridge.controlPeriod
 
-period = 1.0 / FREQUENCY
 policy = POLICY()
-robot = BrickRobot(period)
+robot = BrickRobot()
 
-run(robot, policy, "brick", NAME, steps_for(policy, period, STEPS))
-print("%d overruns" % robot.overruns)
+run(robot, policy, "brick", NAME, STEPS)

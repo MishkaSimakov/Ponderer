@@ -16,13 +16,10 @@ against COL-REFLECT. os.pread on a handle opened once is one syscall for the sam
 number. The mode is set in __init__ and nothing moves it afterwards, so nothing needs
 to reread it.
 
-step waits before writing the action, not after. The brick spends most of a period
-computing, so the action can only land at the end of the one it was computed in; sleeping
-to that instant instead of writing as soon as the number exists makes it a fixed point of
-the period rather than one that moves with however long inference took. Bridge.StepAll
-applies the action at the same point of its step, and Bridge.controlPeriod is the same
-constant as run.py's FREQUENCY. The pacing lives here, which is why runner.run is called
-with period=None.
+The loop is unpaced. The action is written the instant it exists and the observation is
+read right after it, so a step lasts exactly one pass of the loop and the t it returns
+marks when the action landed. The distribution those steps make is what the simulator
+draws its own step length from.
 """
 
 import os
@@ -48,14 +45,12 @@ def open_attribute(device, name, flags):
 
 
 class BrickRobot:
-    def __init__(self, period):
-        self.period = period
+    def __init__(self):
         self.left_color = ColorSensor(INPUT_3)
         self.right_color = ColorSensor(INPUT_2)
         self.left_motor = Motor(OUTPUT_A)
         self.right_motor = Motor(OUTPUT_B)
         self.battery = PowerSupply()
-        self.overruns = 0
 
         self.left_color.mode = ColorSensor.MODE_COL_REFLECT
         self.right_color.mode = ColorSensor.MODE_COL_REFLECT
@@ -76,24 +71,14 @@ class BrickRobot:
         self.right_motor.position = 0
 
         self.start = time.monotonic()
-        self.deadline = self.start
         return self._observe()
 
     def step(self, action):
-        # Before the sleep, so that only the two duty writes stand between the deadline
-        # and the action. The sag it carries is the previous action's either way: that is
-        # what the motors are still doing until the write below.
+        # The sag this carries is the previous action's: that is what the motors are
+        # still doing until the write below.
         volts = int(os.pread(self.voltage, READ_SIZE, 0)) / 1e6
         left = self._duty(action[0], volts)
         right = self._duty(action[1], volts)
-
-        self.deadline += self.period
-        lag = self.deadline - time.monotonic()
-        if lag > 0:
-            time.sleep(lag)
-        else:
-            self.overruns += 1
-            self.deadline = time.monotonic()
 
         os.pwrite(self.left_duty, str(left).encode(), 0)
         os.pwrite(self.right_duty, str(right).encode(), 0)

@@ -65,13 +65,6 @@ def scene_fields(source, component):
     return set(k for k in keys if not k.startswith("m_"))
 
 
-def scene_value(source, component, field):
-    """None when the scene omits the field, which leaves the script initializer."""
-    found = re.search(r"^  %s: (-?[\d.]+)" % field, scene_block(source, component),
-                      re.MULTILINE)
-    return None if found is None else float(found.group(1))
-
-
 def sources(*directories):
     for directory in directories:
         for base, _, files in os.walk(os.path.join(ROOT, directory)):
@@ -113,14 +106,13 @@ def test_brick_returns_the_columns_in_order():
     assert [BRICK_OBSERVATION[ast.unparse(e)] for e in returned.elts] == COLUMNS
 
 
-def test_control_period_matches_the_brick():
-    """The value unity runs: the scene's, or the field initializer it leaves alone."""
-    period = scene_value(SCENE, "Bridge", "controlPeriod")
-    if period is None:
-        period = constant(BRIDGE, "controlPeriod")
-
-    frequency = constant(read("brick", "run.py"), "FREQUENCY")
-    assert abs(period - 1.0 / frequency) < 1e-4
+def test_the_brick_is_not_pinned_to_a_control_rate():
+    """How long a step takes is not a number the brick is set to: it is whatever one
+    pass of the loop costs, reported by the observation clock. The constant that used
+    to have to agree with unity must not come back."""
+    assert re.search(r"\bFREQUENCY\b", read("brick", "run.py")) is None
+    assert "sleep" not in read("brick", "brick_robot.py")
+    assert "sleep" not in read("shared", "runner.py")
 
 
 def test_scene_has_no_fields_the_bridge_script_dropped():

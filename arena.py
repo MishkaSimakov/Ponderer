@@ -9,15 +9,54 @@ The same run on the brick is brick/run.py.
 
 import argparse
 import importlib
+import time
 
 from bridge.sim_robot import Simulation, SimRobot
-from shared.runner import run, steps_for
+from shared.observation import COLUMNS
+from shared.runner import run
+
+T = COLUMNS.index("t")
 
 
 def resolve(spec):
     """module.path:attribute to the attribute itself."""
     module, _, attribute = spec.partition(":")
     return getattr(importlib.import_module(module), attribute)
+
+
+class PacedRobot:
+    """Holds a run back to the speed a human watches it at, by the observation clock.
+
+    The loop is unpaced on both sides, so a sim run would otherwise draw as fast as the
+    socket allows. This is the only place in a run that sleeps, which is why it lives
+    beside the entrypoint that wants it rather than in shared.runner.
+    """
+
+    def __init__(self, robot, speed):
+        self.robot = robot
+        self.speed = speed
+
+    def reset(self):
+        obs = self.robot.reset()
+        self.t = obs[T]
+        self.deadline = time.monotonic()
+        return obs
+
+    def step(self, action):
+        obs = self.robot.step(action)
+        self.deadline += (obs[T] - self.t) / self.speed
+        self.t = obs[T]
+
+        lag = self.deadline - time.monotonic()
+        if lag > 0:
+            time.sleep(lag)
+        else:
+            # Falling behind the picture is not an error, only a slower picture.
+            self.deadline = time.monotonic()
+        return obs
+
+    def stop(self):
+        self.robot.stop()
 
 
 def main():
@@ -41,9 +80,7 @@ def main():
     policy = resolve(args.policy)()
     name = args.name or args.policy.partition(":")[0].rpartition(".")[2]
 
-    overruns = run(robot, policy, "sim", name, steps_for(policy, sim.dt, args.steps),
-                   period=sim.dt / args.speed)
-    print("%d overruns" % overruns)
+    run(PacedRobot(robot, args.speed), policy, "sim", name, args.steps)
 
 
 if __name__ == "__main__":

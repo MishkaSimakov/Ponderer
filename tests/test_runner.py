@@ -3,18 +3,22 @@
 import csv
 import glob
 import os
+import time
 
 import pytest
 
-from shared import logs, runner
+from shared import logs
 from shared.policy import Policy
-from shared.runner import EpisodeEnded, LOG_COLUMNS, run, steps_for
+from shared.runner import EpisodeEnded, LOG_COLUMNS, run
 
 OBS_DIM = len(LOG_COLUMNS) - 2
 
 
 class FakeRobot:
-    """Observation k is a row of k, so a log row shows which one it was built from."""
+    """Observation k is a row of k, so a log row shows which one it was built from.
+
+    Column 0 is t, so the fake clock advances one second per step.
+    """
 
     def __init__(self, fail_at=None, end_at=None):
         self.fail_at = fail_at
@@ -47,6 +51,8 @@ class EchoPolicy(Policy):
 
 
 class TimedPolicy(Policy):
+    """Nine seconds, which against FakeRobot's clock is nine steps."""
+
     duration = 9.0
 
     def act(self, obs):
@@ -66,16 +72,25 @@ def rows(log_root, source="sim"):
         return list(csv.reader(f))
 
 
-def test_steps_given_wins():
-    assert steps_for(TimedPolicy(), 1.0 / 15.0, 100) == 100
+def test_a_policy_schedule_ends_the_run_on_the_observation_clock(log_root):
+    run(FakeRobot(), TimedPolicy(), "sim", "echo", None)
+
+    # Acted on t = 0 through 8, stopped at the observation that read 9.
+    assert len(rows(log_root)) == 1 + 9
 
 
-def test_steps_come_from_the_policy_schedule():
-    assert steps_for(TimedPolicy(), 1.0 / 15.0) == 135
+def test_a_step_count_beats_the_policy_schedule(log_root):
+    run(FakeRobot(), TimedPolicy(), "sim", "echo", 3)
+
+    assert len(rows(log_root)) == 1 + 3
 
 
-def test_a_policy_without_a_schedule_runs_unbounded():
-    assert steps_for(EchoPolicy(), 1.0 / 15.0) is None
+def test_a_policy_without_a_schedule_runs_unbounded(log_root):
+    robot = FakeRobot(end_at=12)
+    run(robot, EchoPolicy(), "sim", "echo", None)
+
+    # Past nine, so nothing but the episode stopped it.
+    assert len(rows(log_root)) == 1 + 12
 
 
 def test_header_is_the_log_columns(log_root):
@@ -140,16 +155,14 @@ def test_the_robot_is_stopped_on_interrupt(log_root):
     assert robot.stopped
 
 
-def test_pacing_left_to_the_robot_counts_no_overruns(log_root):
-    assert run(FakeRobot(), EchoPolicy(), "sim", "echo", 5) == 0
+def test_the_loop_never_waits(log_root, monkeypatch):
+    """The rate is whatever the loop costs. Anything that waits here would set one."""
+    slept = []
+    monkeypatch.setattr(time, "sleep", slept.append)
 
+    run(FakeRobot(), EchoPolicy(), "sim", "echo", 5)
 
-def test_a_period_the_loop_cannot_keep_counts_every_step(log_root):
-    assert run(FakeRobot(), EchoPolicy(), "sim", "echo", 5, period=0.0) == 5
-
-
-def test_a_period_the_loop_can_keep_counts_none(log_root):
-    assert run(FakeRobot(), EchoPolicy(), "sim", "echo", 3, period=0.01) == 0
+    assert slept == []
 
 
 def test_only_known_sources_are_logged(log_root):

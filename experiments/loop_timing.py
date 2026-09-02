@@ -2,9 +2,9 @@
 """How long each part of one control step takes on the brick.
 
 The phases are the real loop's, in the real loop's order. shared.runner calls act and
-log, then brick.BrickRobot.step reads the battery and converts both duties, sleeps to
-the deadline, writes the two duty cycles and observes. So everything except the write
-and the observe happens before the deadline, and body is the work one period covers.
+log, then brick.BrickRobot.step reads the battery, converts both duties, writes the two
+duty cycles and observes. Nothing waits, so body is the sum of the phases and body is
+the step: how long one of these takes is what sets the rate.
 
 Every read and write here is the robot's own, on the descriptors it opened, so volts,
 write and observe cost what the loop costs and not what ev3dev2 would.
@@ -18,7 +18,7 @@ One row per step in logs/brick/<NAME>-<utc>.csv, written after the loop so that
 writing it does not land inside a step. The row the loop logs is a real run's row,
 so its cost is a real run's cost.
 
-    ./experiments/loop_timing.py [frequency] [steps]
+    ./experiments/loop_timing.py [steps]
 """
 
 import os
@@ -39,20 +39,16 @@ POLICY = latest
 NAME = "loop_timing"  # logs/brick/<NAME>-<utc>.csv
 
 STEPS = 200
-FREQUENCY = 20.0
 CLOCK_CALLS = 10000
 
 PHASES = ["features", "net", "log", "volts", "duty", "write", "observe", "body"]
 
-# Sweeping the rate is the point of the script, so both come off the command line.
-FREQUENCY = float(sys.argv[1]) if len(sys.argv) > 1 else FREQUENCY
-STEPS = int(sys.argv[2]) if len(sys.argv) > 2 else STEPS
+STEPS = int(sys.argv[1]) if len(sys.argv) > 1 else STEPS
 
-period = 1.0 / FREQUENCY
 policy = POLICY()
 if not isinstance(policy, NetPolicy):
     raise TypeError("the features/net split needs a NetPolicy, got %s" % type(policy))
-robot = BrickRobot(period)
+robot = BrickRobot()
 
 start = time.monotonic()
 for _ in range(CLOCK_CALLS):
@@ -65,11 +61,9 @@ prefix = run_prefix("brick", NAME)
 row_log = prefix + "-rows.csv"
 rows = CsvLogger(row_log, LOG_COLUMNS)
 timings = []
-overruns = 0
 
 obs = robot.reset()
 started = False
-deadline = time.monotonic()
 
 try:
     for _ in range(STEPS):
@@ -87,24 +81,14 @@ try:
         left = robot._duty(action[0], volts)
         right = robot._duty(action[1], volts)
         t5 = time.monotonic()
-
-        deadline += period
-        lag = deadline - time.monotonic()
-        if lag > 0:
-            time.sleep(lag)
-        else:
-            overruns += 1
-            deadline = time.monotonic()
-
-        t6 = time.monotonic()
         os.pwrite(robot.left_duty, str(left).encode(), 0)
         os.pwrite(robot.right_duty, str(right).encode(), 0)
-        t7 = time.monotonic()
+        t6 = time.monotonic()
         obs = robot._observe()
-        t8 = time.monotonic()
+        t7 = time.monotonic()
 
-        timings.append([t1 - t0, t2 - t1, t3 - t2, t4 - t3, t5 - t4, t7 - t6, t8 - t7,
-                        (t5 - t0) + (t8 - t6)])
+        timings.append([t1 - t0, t2 - t1, t3 - t2, t4 - t3, t5 - t4, t6 - t5, t7 - t6,
+                        t7 - t0])
 except KeyboardInterrupt:
     print("interrupted")
 finally:
@@ -117,7 +101,8 @@ for timing in timings:
     logger.log(*timing)
 logger.close()
 
-print("%d steps at %.0f Hz, %d overruns" % (len(timings), FREQUENCY, overruns))
+body = [timing[PHASES.index("body")] for timing in timings]
+print("%d steps, %.1f Hz mean" % (len(timings), len(body) / sum(body)))
 print("%-8s %8s %8s %8s %8s" % ("ms", "mean", "p50", "p95", "max"))
 for i, phase in enumerate(PHASES):
     ordered = sorted(timing[i] for timing in timings)
