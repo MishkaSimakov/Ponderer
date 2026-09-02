@@ -16,7 +16,7 @@ import os
 import numpy as np
 
 from shared.action import VOLTS
-from shared.features import Features
+from shared.features import DIM, Features, NAMES
 from shared.policy import Policy
 
 ROOT = os.path.join(
@@ -53,6 +53,17 @@ def folded(params, name, scale=1.0):
     return (np.concatenate((w, b.reshape(-1, 1)), 1) * scale).astype(np.float32)
 
 
+def check_width(width):
+    """The export's input against the feature vector shared/features.py now builds.
+
+    Without this a stale export survives construction and dies inside the first forward
+    pass, as a broadcast error on a buffer, with nothing naming the feature vector.
+    """
+    if width != DIM:
+        raise ValueError("export takes %d inputs, features give %d: %s"
+                         % (width, DIM, ", ".join(NAMES)))
+
+
 def inlet(size):
     """Input buffer for a folded layer: size values, then the 1 the bias multiplies."""
     return np.ones(size + 1, np.float32)
@@ -87,7 +98,9 @@ class NetPolicy(Policy):
             head_in = self._build_lstm()
             self.core = self._recurrent
         elif self.arch == "mlp":
-            head_in = inlet(params["pi.0.w"].shape[1])
+            width = params["pi.0.w"].shape[1]
+            check_width(width)
+            head_in = inlet(width)
             self.source = head_in[:-1]
             self.core = self._feed
         else:
@@ -111,6 +124,7 @@ class NetPolicy(Policy):
         p = self.p
         hidden = int(p["hidden"])
         dim = p["lstm.ih.w"].shape[1]
+        check_width(dim)
 
         # torch keeps the four gates in one matrix as i, f, g, o and adds both biases.
         self.gw = np.concatenate(
@@ -147,6 +161,7 @@ class NetPolicy(Policy):
         """Returns the model dimension, which is what the head takes."""
         p = self.p
         size = int(p["window"])
+        check_width(int(p["frame"]))
         # Zero padded, like VecFrameStack, which clears the stack on every reset.
         self.window = np.zeros((size, int(p["frame"])), np.float32)
         self.mask = np.triu(np.full((size, size), -np.inf, np.float32), 1)

@@ -118,6 +118,21 @@ def test_frame_stack_puts_the_newest_frame_last():
         assert obs[0, -DIM:].tolist() == [tick] * DIM
 
 
+@pytest.mark.parametrize("arch", ARCHS)
+def test_an_export_of_the_wrong_width_is_refused(arch, tmp_path, monkeypatch):
+    """Widening the feature vector strands every export taken before it. That has to
+    say so on load, not as a broadcast error inside the first forward pass."""
+    params = exported(model_for(arch), arch, tmp_path, monkeypatch)
+    if arch == "transformer":
+        params["frame"] = np.array(DIM + 1)
+    else:
+        key = "lstm.ih.w" if arch == "lstm" else "pi.0.w"
+        params[key] = np.concatenate([params[key], params[key][:, :1]], axis=1)
+
+    with pytest.raises(ValueError, match="inputs"):
+        NetPolicy(params)
+
+
 def test_export_rejects_a_head_activation_net_py_cannot_run():
     model = model_for("mlp")
     model.policy.mlp_extractor.policy_net[1] = nn.ReLU()
